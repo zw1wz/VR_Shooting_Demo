@@ -4,6 +4,12 @@ public class GunShooter : MonoBehaviour
 {
     public Transform muzzlePoint;
     public float shootDistance = 100f;
+    public PistolStateMachine pistolState;
+    public MonoBehaviour weaponInputSource;
+
+    [Header("Fire Rate")]
+    public float fireRateRoundsPerMinute = 300f;
+    public float shotInputBufferTime = 0.15f;
 
     [Header("Muzzle Flash")]
     public ParticleSystem muzzleFlash;
@@ -19,19 +25,66 @@ public class GunShooter : MonoBehaviour
     [Header("Gun Audio")]
     public AudioSource gunAudioSource;
     public AudioClip gunShotClip;
+    public AudioClip dryFireClip;
+
+    private IWeaponInput weaponInput;
+    private float nextAllowedShootTime;
+    private float bufferedShotExpireTime = -1f;
 
     private void Start()
     {
+        InitPistolState();
+        InitWeaponInput();
         InitGunAudio();
     }
 
     private void Update()
     {
         UpdateAimDot();
+        HandleWeaponOperationInput();
 
-        if (Input.GetMouseButtonDown(0))
+        if (weaponInput != null && weaponInput.TriggerPressedThisFrame)
         {
-            Shoot();
+            BufferShotInput();
+        }
+
+        TryConsumeBufferedShot();
+
+        if (weaponInput == null || !weaponInput.TriggerHeld)
+        {
+            ReleaseTrigger();
+        }
+    }
+
+    private void InitPistolState()
+    {
+        if (pistolState == null)
+        {
+            pistolState = GetComponent<PistolStateMachine>();
+        }
+
+        if (pistolState == null)
+        {
+            pistolState = gameObject.AddComponent<PistolStateMachine>();
+        }
+    }
+
+    private void InitWeaponInput()
+    {
+        if (weaponInputSource == null)
+        {
+            weaponInputSource = GetComponent<MouseKeyboardWeaponInput>();
+        }
+
+        if (weaponInputSource == null)
+        {
+            weaponInputSource = gameObject.AddComponent<MouseKeyboardWeaponInput>();
+        }
+
+        weaponInput = weaponInputSource as IWeaponInput;
+        if (weaponInput == null)
+        {
+            Debug.LogError("Weapon input source must implement IWeaponInput.");
         }
     }
 
@@ -53,6 +106,39 @@ public class GunShooter : MonoBehaviour
         {
             gunShotClip.LoadAudioData();
             gunAudioSource.clip = gunShotClip;
+        }
+    }
+
+    private void HandleWeaponOperationInput()
+    {
+        if (pistolState == null || weaponInput == null)
+        {
+            return;
+        }
+
+        if (weaponInput.InsertMagazinePressedThisFrame)
+        {
+            pistolState.InsertFullMagazine();
+        }
+
+        if (weaponInput.RemoveMagazinePressedThisFrame)
+        {
+            pistolState.RemoveMagazine();
+        }
+
+        if (weaponInput.SlidePulledThisFrame)
+        {
+            pistolState.PullSlide();
+        }
+
+        if (weaponInput.SlideReleasedThisFrame)
+        {
+            pistolState.ReleaseSlide();
+        }
+
+        if (weaponInput.SlideLockReleasedThisFrame)
+        {
+            pistolState.ReleaseSlideLock();
         }
     }
 
@@ -98,12 +184,71 @@ public class GunShooter : MonoBehaviour
         aimDot.transform.position = ray.origin + ray.direction * shootDistance;
     }
 
-    private void Shoot()
+    private void BufferShotInput()
     {
-        if (GameManager.Instance == null || !GameManager.Instance.CanShoot())
+        bufferedShotExpireTime = Time.time + Mathf.Max(0f, shotInputBufferTime);
+    }
+
+    private void TryConsumeBufferedShot()
+    {
+        if (bufferedShotExpireTime < 0f)
         {
             return;
         }
+
+        if (Time.time > bufferedShotExpireTime)
+        {
+            ClearBufferedShot();
+            return;
+        }
+
+        if (GameManager.Instance == null || !GameManager.Instance.CanShoot())
+        {
+            ClearBufferedShot();
+            return;
+        }
+
+        if (!CanShootByFireRate())
+        {
+            return;
+        }
+
+        if (pistolState == null)
+        {
+            InitPistolState();
+        }
+
+        ClearBufferedShot();
+
+        PistolTriggerResult result = pistolState.PressTrigger();
+        if (result == PistolTriggerResult.Fired)
+        {
+            Shoot();
+            return;
+        }
+
+        if (result == PistolTriggerResult.DryFire)
+        {
+            PlayDryFire();
+        }
+    }
+
+    private void ClearBufferedShot()
+    {
+        bufferedShotExpireTime = -1f;
+    }
+
+    private void ReleaseTrigger()
+    {
+        if (pistolState != null)
+        {
+            pistolState.ReleaseTrigger();
+        }
+    }
+
+    private void Shoot()
+    {
+        nextAllowedShootTime = Time.time + GetShotCooldown();
 
         PlayGunShot();
 
@@ -124,6 +269,60 @@ public class GunShooter : MonoBehaviour
         }
 
         GameManager.Instance.RecordShot(hitTarget, hitDistance);
+    }
+
+    private bool CanShootByFireRate()
+    {
+        return Time.time >= nextAllowedShootTime;
+    }
+
+    public string GetWeaponStatusText()
+    {
+        if (pistolState == null)
+        {
+            return "Weapon offline";
+        }
+
+        return pistolState.GetStatusLine();
+    }
+
+    public void ResetWeaponState()
+    {
+        ClearBufferedShot();
+        nextAllowedShootTime = 0f;
+
+        if (pistolState == null)
+        {
+            InitPistolState();
+        }
+
+        if (pistolState != null)
+        {
+            pistolState.ResetToConfiguredState();
+        }
+    }
+
+    private float GetShotCooldown()
+    {
+        float roundsPerMinute = GetEffectiveFireRate();
+        if (roundsPerMinute <= 0f)
+        {
+            return 0f;
+        }
+
+        return 60f / roundsPerMinute;
+    }
+
+    private float GetEffectiveFireRate()
+    {
+        if (pistolState != null
+            && pistolState.config != null
+            && pistolState.config.FireRateRoundsPerMinute > 0f)
+        {
+            return pistolState.config.FireRateRoundsPerMinute;
+        }
+
+        return fireRateRoundsPerMinute;
     }
 
     private void SpawnHitEffect(RaycastHit hit)
@@ -154,5 +353,19 @@ public class GunShooter : MonoBehaviour
         gunAudioSource.mute = false;
         gunAudioSource.spatialBlend = 0f;
         gunAudioSource.PlayOneShot(gunShotClip, 1f);
+    }
+
+    private void PlayDryFire()
+    {
+        if (gunAudioSource == null || dryFireClip == null)
+        {
+            return;
+        }
+
+        gunAudioSource.Stop();
+        gunAudioSource.volume = 1f;
+        gunAudioSource.mute = false;
+        gunAudioSource.spatialBlend = 0f;
+        gunAudioSource.PlayOneShot(dryFireClip, 1f);
     }
 }

@@ -186,18 +186,25 @@ public class UIThemeController : MonoBehaviour
             return;
         }
 
+        bool isWeaponStatusText = text.gameObject.name == "ScoreText";
+        float textHeight = isWeaponStatusText ? 68f : 42f;
+        float textWidth = isWeaponStatusText ? 520f : 290f;
+
         RectTransform rect = text.GetComponent<RectTransform>();
         rect.anchorMin = new Vector2(0f, 1f);
         rect.anchorMax = new Vector2(0f, 1f);
         rect.pivot = new Vector2(0f, 1f);
         rect.anchoredPosition = new Vector2(34f, -32f - index * 54f);
-        rect.sizeDelta = new Vector2(290f, 42f);
+        rect.sizeDelta = new Vector2(textWidth, textHeight);
 
-        text.fontSize = 24f;
+        text.fontSize = isWeaponStatusText ? 20f : 24f;
         text.enableAutoSizing = false;
         text.fontStyle = FontStyles.Bold;
-        text.alignment = TextAlignmentOptions.MidlineLeft;
+        text.alignment = isWeaponStatusText
+            ? TextAlignmentOptions.TopLeft
+            : TextAlignmentOptions.MidlineLeft;
         text.color = textColor;
+        text.lineSpacing = isWeaponStatusText ? 2f : 0f;
         text.raycastTarget = false;
 
         EnsureBackplate(text);

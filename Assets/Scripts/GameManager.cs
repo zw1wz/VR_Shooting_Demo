@@ -64,6 +64,10 @@ public class GameManager : MonoBehaviour
     [Header("UI Theme")]
     public bool applyRuntimeUITheme = true;
 
+    [Header("Weapon UI")]
+    public GunShooter gunShooter;
+    public bool showWeaponStatusInHud = true;
+
     private enum GameState
     {
         Idle,
@@ -111,6 +115,7 @@ public class GameManager : MonoBehaviour
     private void Start()
     {
         InitAudio();
+        InitWeaponUI();
         HideAllTargets();
         ApplyUITheme();
         ShowStartUI();
@@ -158,6 +163,14 @@ public class GameManager : MonoBehaviour
         LoadClip(metalHitClip, hitAudioSource);
 
         generatedBeepClip = CreateBeepClip();
+    }
+
+    private void InitWeaponUI()
+    {
+        if (gunShooter == null)
+        {
+            gunShooter = FindObjectOfType<GunShooter>();
+        }
     }
 
     private AudioSource EnsureAudioSource(AudioSource source)
@@ -237,6 +250,11 @@ public class GameManager : MonoBehaviour
         score = 0;
         activeTargets.Clear();
         shotRecords.Clear();
+
+        if (gunShooter != null)
+        {
+            gunShooter.ResetWeaponState();
+        }
     }
 
     private IEnumerator WaitThenBeep()
@@ -684,8 +702,18 @@ public class GameManager : MonoBehaviour
 
         if (scoreText != null)
         {
-            scoreText.text = "Score: " + score;
+            scoreText.text = GetScoreStatusText();
         }
+    }
+
+    private string GetScoreStatusText()
+    {
+        if (!showWeaponStatusInHud || gunShooter == null)
+        {
+            return "Score: " + score;
+        }
+
+        return "Score: " + score + "\n" + gunShooter.GetWeaponStatusText();
     }
 
     private void UpdateResultUI()

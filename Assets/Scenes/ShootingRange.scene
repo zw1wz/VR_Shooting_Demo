@@ -153,8 +153,8 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f4688fdb7df04437aeb418b961361dc5, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
+  m_Name:
+  m_EditorClassIdentifier:
   m_Material: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
   m_RaycastTarget: 1
@@ -798,6 +798,8 @@ GameObject:
   m_Component:
   - component: {fileID: 417375403}
   - component: {fileID: 417375402}
+  - component: {fileID: 417375406}
+  - component: {fileID: 417375407}
   - component: {fileID: 417375404}
   - component: {fileID: 417375405}
   m_Layer: 0
@@ -822,6 +824,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   muzzlePoint: {fileID: 1280506044}
   shootDistance: 100
+  pistolState: {fileID: 417375406}
+  weaponInputSource: {fileID: 417375407}
+  fireRateRoundsPerMinute: 300
+  shotInputBufferTime: 0.15
   muzzleFlash: {fileID: 561241566}
   hitEffectPrefab: {fileID: 5179154565004563984, guid: dcbb4c5493f211c4fa7f3fa5ae7a09e1, type: 3}
   hitEffectLifeTime: 0.5
@@ -829,6 +835,59 @@ MonoBehaviour:
   aimDotOffset: 0.03
   gunAudioSource: {fileID: 417375405}
   gunShotClip: {fileID: 8300000, guid: 43d054a8c7e98ff418a7a442da90fd97, type: 3}
+  dryFireClip: {fileID: 0}
+--- !u!114 &417375406
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 417375401}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 730973505cef4bf88de3a698ef3b09fb, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  config:
+    weaponProfile:
+      weaponName: G17
+      fireMode: 0
+      caliber: 9x19mm
+      magazineCapacity: 17
+      fireRateRoundsPerMinute: 300
+      usesDetachableMagazine: 1
+      locksOpenOnEmpty: 1
+    startWithMagazine: 1
+    startChambered: 1
+    slideStartsLocked: 0
+    autoCycleSlideAfterShot: 1
+    requireTriggerReset: 1
+  magazine:
+    capacity: 17
+    ammoCount: 17
+  magazineInserted: 1
+  roundInChamber: 1
+  slidePulled: 0
+  slideLocked: 0
+  triggerHeld: 0
+--- !u!114 &417375407
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 417375401}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 488e707c61304790978b40917db2fed9, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  triggerMouseButton: 0
+  insertMagazineKey: 114
+  removeMagazineKey: 116
+  pullSlideKey: 102
+  releaseSlideKey: 103
+  releaseSlideLockKey: 118
 --- !u!4 &417375403
 Transform:
   m_ObjectHideFlags: 0
@@ -7179,6 +7238,9 @@ MonoBehaviour:
   bulletText: {fileID: 32432201}
   scoreText: {fileID: 1448353457}
   resultText: {fileID: 609877827}
+  applyRuntimeUITheme: 1
+  gunShooter: {fileID: 417375402}
+  showWeaponStatusInHud: 1
 --- !u!4 &1230544568
 Transform:
   m_ObjectHideFlags: 0
