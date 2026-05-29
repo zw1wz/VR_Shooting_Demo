@@ -61,6 +61,9 @@ public class GameManager : MonoBehaviour
     public TMP_Text scoreText;
     public TMP_Text resultText;
 
+    [Header("UI Theme")]
+    public bool applyRuntimeUITheme = true;
+
     private enum GameState
     {
         Idle,
@@ -109,6 +112,7 @@ public class GameManager : MonoBehaviour
     {
         InitAudio();
         HideAllTargets();
+        ApplyUITheme();
         ShowStartUI();
 
         StartCoroutine(WarmUpBeepAudio());
@@ -614,6 +618,22 @@ public class GameManager : MonoBehaviour
         SetPanelActive(resultPanel, false);
     }
 
+    private void ApplyUITheme()
+    {
+        if (!applyRuntimeUITheme)
+        {
+            return;
+        }
+
+        UIThemeController themeController = GetComponent<UIThemeController>();
+        if (themeController == null)
+        {
+            themeController = gameObject.AddComponent<UIThemeController>();
+        }
+
+        themeController.ApplyTheme(startPanel, waitingPanel, shootingPanel, resultPanel);
+    }
+
     private static void SetPanelActive(GameObject panel, bool active)
     {
         if (panel != null)
@@ -676,17 +696,19 @@ public class GameManager : MonoBehaviour
         }
 
         StringBuilder builder = new StringBuilder();
-        builder.AppendLine("Final Score: " + score);
-        builder.AppendLine("Hits: " + GetHitCount() + "/" + bulletCount);
-        builder.AppendLine("Hit Rate: " + GetHitRate().ToString("F1") + "%");
+        builder.AppendLine("FINAL SCORE    " + score);
+        builder.AppendLine("HITS           " + GetHitCount() + "/" + bulletCount);
+        builder.AppendLine("HIT RATE       " + GetHitRate().ToString("F1") + "%");
         builder.AppendLine();
+        builder.AppendLine("SHOT LOG");
+        builder.AppendLine("------------------------------------------------");
 
         foreach (ShotRecord record in shotRecords)
         {
             string result = record.Hit ? "Hit " + record.TargetName : "Miss";
             builder
-                .Append("Shot ").Append(record.Index)
-                .Append("    Time: ").Append(record.Time.ToString("F3")).Append("s")
+                .Append("#").Append(record.Index.ToString("00"))
+                .Append("    ").Append(record.Time.ToString("F3")).Append("s")
                 .Append("    ").AppendLine(result);
         }
 
