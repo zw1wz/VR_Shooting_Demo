@@ -289,6 +289,7 @@ public class GameManager : MonoBehaviour
         if (gunShooter != null)
         {
             gunShooter.ResetWeaponState();
+            gunShooter.ResetTrainingMetrics();
         }
     }
 
@@ -301,6 +302,12 @@ public class GameManager : MonoBehaviour
 
         startShootTime = Time.time;
         state = GameState.Shooting;
+
+        if (gunShooter != null)
+        {
+            gunShooter.BeginTrainingMetrics();
+        }
+
         ShowShootingUI();
         roundCoroutine = null;
     }
@@ -546,6 +553,12 @@ public class GameManager : MonoBehaviour
     private void EndDemo()
     {
         state = GameState.Result;
+
+        if (gunShooter != null)
+        {
+            gunShooter.EndTrainingMetrics();
+        }
+
         HideAllTargets();
         ShowResultUI();
     }
@@ -793,6 +806,7 @@ public class GameManager : MonoBehaviour
         builder.AppendLine("最终得分    " + score);
         builder.AppendLine("命中次数    " + GetHitCount() + "/" + bulletCount);
         builder.AppendLine("命中率      " + GetHitRate().ToString("F1") + "%");
+        AppendWeaponTrainingMetrics(builder);
         builder.AppendLine();
         builder.AppendLine("射击记录");
         builder.AppendLine("------------------------------------------------");
@@ -807,5 +821,26 @@ public class GameManager : MonoBehaviour
         }
 
         resultText.text = builder.ToString();
+    }
+
+    private void AppendWeaponTrainingMetrics(StringBuilder builder)
+    {
+        if (gunShooter == null)
+        {
+            return;
+        }
+
+        builder.AppendLine();
+        builder.AppendLine("枪械操作");
+        builder.AppendLine("有效射击    " + gunShooter.FiredShotCount);
+        builder.AppendLine("空击次数    " + gunShooter.DryFireCount);
+        builder.AppendLine("误操作次数  " + gunShooter.OperationErrorCount);
+        builder.AppendLine("最快换弹    " + FormatMetricDuration(gunShooter.BestReloadTime));
+        builder.AppendLine("空仓处理    " + FormatMetricDuration(gunShooter.BestSlideLockRecoveryTime));
+    }
+
+    private static string FormatMetricDuration(float duration)
+    {
+        return duration >= 0f ? duration.ToString("F3") + " 秒" : "--";
     }
 }

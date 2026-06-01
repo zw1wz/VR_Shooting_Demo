@@ -41,6 +41,11 @@ public class PistolStateMachine : MonoBehaviour
         get { return slideLocked; }
     }
 
+    public bool CanFire
+    {
+        get { return roundInChamber && !slidePulled && !slideLocked; }
+    }
+
     public PistolTriggerResult LastTriggerResult { get; private set; }
 
     private void Awake()
@@ -86,6 +91,11 @@ public class PistolStateMachine : MonoBehaviour
 
     public bool InsertFullMagazine()
     {
+        if (magazineInserted)
+        {
+            return false;
+        }
+
         magazine.Configure(config.NormalizedMagazineCapacity, true);
         magazine.LoadFull();
         magazineInserted = true;

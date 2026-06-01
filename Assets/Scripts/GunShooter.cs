@@ -36,6 +36,17 @@ public class GunShooter : MonoBehaviour
     private float bufferedShotExpireTime = -1f;
     private string weaponFeedbackText = string.Empty;
     private float weaponFeedbackExpireTime = -1f;
+    private bool metricsTrackingActive;
+    private bool reloadTimerActive;
+    private float reloadStartTime;
+    private bool slideLockRecoveryTimerActive;
+    private float slideLockRecoveryStartTime;
+
+    public int FiredShotCount { get; private set; }
+    public int DryFireCount { get; private set; }
+    public int OperationErrorCount { get; private set; }
+    public float BestReloadTime { get; private set; } = -1f;
+    public float BestSlideLockRecoveryTime { get; private set; } = -1f;
 
     private void Start()
     {
@@ -133,52 +144,99 @@ public class GunShooter : MonoBehaviour
 
         if (weaponInput.InsertMagazinePressedThisFrame)
         {
-            pistolState.InsertFullMagazine();
-            ShowWeaponFeedback("已插入满弹匣");
+            HandleInsertMagazine();
         }
 
         if (weaponInput.RemoveMagazinePressedThisFrame)
         {
-            ShowWeaponFeedback(
-                pistolState.RemoveMagazine()
-                    ? "已拔出弹匣"
-                    : "当前没有可拔出的弹匣"
-            );
+            HandleRemoveMagazine();
         }
 
         if (weaponInput.SlidePulledThisFrame)
         {
-            bool roundEjected = pistolState.RoundInChamber;
-            ShowWeaponFeedback(
-                pistolState.PullSlide()
-                    ? roundEjected
-                        ? "已拉动枪机，退出膛内弹"
-                        : "已拉动枪机"
-                    : "枪机已经处于后拉状态"
-            );
+            HandlePullSlide();
         }
 
         if (weaponInput.SlideReleasedThisFrame)
         {
-            ShowWeaponFeedback(
-                pistolState.ReleaseSlide()
-                    ? pistolState.RoundInChamber
-                        ? "已释放枪机，子弹上膛"
-                        : "已释放枪机，膛内无弹"
-                    : "枪机尚未后拉"
-            );
+            HandleReleaseSlide();
         }
 
         if (weaponInput.SlideLockReleasedThisFrame)
         {
-            ShowWeaponFeedback(
-                pistolState.ReleaseSlideLock()
-                    ? pistolState.RoundInChamber
-                        ? "已解除空仓挂机，子弹上膛"
-                        : "已解除空仓挂机，膛内无弹"
-                    : "当前没有空仓挂机"
-            );
+            HandleReleaseSlideLock();
         }
+    }
+
+    private void HandleInsertMagazine()
+    {
+        if (!pistolState.InsertFullMagazine())
+        {
+            RegisterOperationError();
+            ShowWeaponFeedback("已有弹匣，请先拔出");
+            return;
+        }
+
+        ShowWeaponFeedback("已插入满弹匣");
+        TryCompleteRecoveryTimers();
+    }
+
+    private void HandleRemoveMagazine()
+    {
+        if (!pistolState.RemoveMagazine())
+        {
+            RegisterOperationError();
+            ShowWeaponFeedback("当前没有可拔出的弹匣");
+            return;
+        }
+
+        BeginReloadTimer();
+        ShowWeaponFeedback("已拔出弹匣");
+    }
+
+    private void HandlePullSlide()
+    {
+        bool roundEjected = pistolState.RoundInChamber;
+        if (!pistolState.PullSlide())
+        {
+            RegisterOperationError();
+            ShowWeaponFeedback("枪机已经处于后拉状态");
+            return;
+        }
+
+        ShowWeaponFeedback(roundEjected
+            ? "已拉动枪机，退出膛内弹"
+            : "已拉动枪机");
+    }
+
+    private void HandleReleaseSlide()
+    {
+        if (!pistolState.ReleaseSlide())
+        {
+            RegisterOperationError();
+            ShowWeaponFeedback("枪机尚未后拉");
+            return;
+        }
+
+        ShowWeaponFeedback(pistolState.RoundInChamber
+            ? "已释放枪机，子弹上膛"
+            : "已释放枪机，膛内无弹");
+        TryCompleteRecoveryTimers();
+    }
+
+    private void HandleReleaseSlideLock()
+    {
+        if (!pistolState.ReleaseSlideLock())
+        {
+            RegisterOperationError();
+            ShowWeaponFeedback("当前没有空仓挂机");
+            return;
+        }
+
+        ShowWeaponFeedback(pistolState.RoundInChamber
+            ? "已解除空仓挂机，子弹上膛"
+            : "已解除空仓挂机，膛内无弹");
+        TryCompleteRecoveryTimers();
     }
 
     private static void ConfigureAudioSource(AudioSource source)
@@ -268,9 +326,14 @@ public class GunShooter : MonoBehaviour
 
         if (result == PistolTriggerResult.DryFire)
         {
-            PlayDryFire();
+            RegisterDryFire();
+        }
+        else
+        {
+            RegisterOperationError();
         }
 
+        PlayDryFire();
         ShowWeaponFeedback(pistolState.GetTriggerFeedbackText(result));
     }
 
@@ -290,6 +353,7 @@ public class GunShooter : MonoBehaviour
     private void Shoot()
     {
         nextAllowedShootTime = Time.time + GetShotCooldown();
+        RegisterFiredShot();
 
         PlayGunShot();
 
@@ -309,12 +373,13 @@ public class GunShooter : MonoBehaviour
             SpawnHitEffect(hit);
         }
 
-        GameManager.Instance.RecordShot(hitTarget, hitDistance);
-
         if (pistolState != null && pistolState.SlideLocked)
         {
+            BeginSlideLockRecoveryTimer();
             ShowWeaponFeedback("弹匣已空，进入空仓挂机");
         }
+
+        GameManager.Instance.RecordShot(hitTarget, hitDistance);
     }
 
     private bool CanShootByFireRate()
@@ -350,6 +415,30 @@ public class GunShooter : MonoBehaviour
         }
 
         return weaponFeedbackText;
+    }
+
+    public void ResetTrainingMetrics()
+    {
+        metricsTrackingActive = false;
+        FiredShotCount = 0;
+        DryFireCount = 0;
+        OperationErrorCount = 0;
+        BestReloadTime = -1f;
+        BestSlideLockRecoveryTime = -1f;
+        reloadTimerActive = false;
+        slideLockRecoveryTimerActive = false;
+    }
+
+    public void BeginTrainingMetrics()
+    {
+        metricsTrackingActive = true;
+    }
+
+    public void EndTrainingMetrics()
+    {
+        metricsTrackingActive = false;
+        reloadTimerActive = false;
+        slideLockRecoveryTimerActive = false;
     }
 
     public void ResetWeaponState()
@@ -452,6 +541,81 @@ public class GunShooter : MonoBehaviour
     {
         weaponFeedbackText = string.Empty;
         weaponFeedbackExpireTime = -1f;
+    }
+
+    private void RegisterFiredShot()
+    {
+        if (metricsTrackingActive)
+        {
+            FiredShotCount++;
+        }
+    }
+
+    private void RegisterDryFire()
+    {
+        if (metricsTrackingActive)
+        {
+            DryFireCount++;
+        }
+    }
+
+    private void RegisterOperationError()
+    {
+        if (metricsTrackingActive)
+        {
+            OperationErrorCount++;
+        }
+    }
+
+    private void BeginReloadTimer()
+    {
+        if (metricsTrackingActive && !reloadTimerActive)
+        {
+            reloadTimerActive = true;
+            reloadStartTime = Time.time;
+        }
+    }
+
+    private void BeginSlideLockRecoveryTimer()
+    {
+        if (metricsTrackingActive && !slideLockRecoveryTimerActive)
+        {
+            slideLockRecoveryTimerActive = true;
+            slideLockRecoveryStartTime = Time.time;
+        }
+    }
+
+    private void TryCompleteRecoveryTimers()
+    {
+        if (!metricsTrackingActive || pistolState == null || !pistolState.CanFire)
+        {
+            return;
+        }
+
+        if (reloadTimerActive)
+        {
+            BestReloadTime = GetBestDuration(BestReloadTime, Time.time - reloadStartTime);
+            reloadTimerActive = false;
+        }
+
+        if (slideLockRecoveryTimerActive)
+        {
+            BestSlideLockRecoveryTime = GetBestDuration(
+                BestSlideLockRecoveryTime,
+                Time.time - slideLockRecoveryStartTime
+            );
+            slideLockRecoveryTimerActive = false;
+        }
+    }
+
+    private static float GetBestDuration(float currentBest, float candidate)
+    {
+        if (candidate < 0f)
+        {
+            return currentBest;
+        }
+
+        return currentBest < 0f ? candidate : Mathf.Min(currentBest, candidate);
     }
 
     private static AudioClip CreateDryFireClip()

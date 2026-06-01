@@ -24,7 +24,7 @@ public class UIThemeController : MonoBehaviour
     {
         StylePanel(startPanel, new Vector2(840f, 460f));
         StylePanel(waitingPanel, new Vector2(760f, 330f));
-        StylePanel(resultPanel, new Vector2(900f, 720f));
+        StylePanel(resultPanel, new Vector2(900f, 840f));
         StyleShootingPanel(shootingPanel);
 
         StyleStartPanel(startPanel);
@@ -155,7 +155,7 @@ public class UIThemeController : MonoBehaviour
             42f,
             TextColor,
             TextAlignmentOptions.Center,
-            new Vector2(0f, 282f),
+            new Vector2(0f, 340f),
             new Vector2(760f, 72f),
             FontStyles.Bold
         );
@@ -167,8 +167,8 @@ public class UIThemeController : MonoBehaviour
             24f,
             TextColor,
             TextAlignmentOptions.TopLeft,
-            new Vector2(0f, 28f),
-            new Vector2(760f, 430f),
+            new Vector2(0f, 52f),
+            new Vector2(760f, 560f),
             FontStyles.Normal
         );
 
@@ -179,7 +179,7 @@ public class UIThemeController : MonoBehaviour
         }
 
         Button restartButton = FindButton(panel, "RestartButton");
-        StyleButton(restartButton, "重新开始", new Vector2(0f, -304f), new Vector2(280f, 64f));
+        StyleButton(restartButton, "重新开始", new Vector2(0f, -365f), new Vector2(280f, 64f));
     }
 
     private static void StyleHudText(TMP_Text text, int index, Color textColor)
