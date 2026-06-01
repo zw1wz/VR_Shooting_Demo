@@ -6,6 +6,7 @@ public class GunShooter : MonoBehaviour
     public float shootDistance = 100f;
     public PistolStateMachine pistolState;
     public MonoBehaviour weaponInputSource;
+    public PistolVisualController visualController;
 
     [Header("Fire Rate")]
     public float fireRateRoundsPerMinute = 300f;
@@ -51,6 +52,7 @@ public class GunShooter : MonoBehaviour
     private void Start()
     {
         InitPistolState();
+        InitVisualController();
         InitWeaponInput();
         InitGunAudio();
     }
@@ -103,6 +105,22 @@ public class GunShooter : MonoBehaviour
         {
             Debug.LogError("Weapon input source must implement IWeaponInput.");
         }
+    }
+
+    private void InitVisualController()
+    {
+        if (visualController == null)
+        {
+            visualController = GetComponent<PistolVisualController>();
+        }
+
+        if (visualController == null)
+        {
+            visualController = gameObject.AddComponent<PistolVisualController>();
+        }
+
+        visualController.pistolState = pistolState;
+        visualController.Initialize();
     }
 
     private void InitGunAudio()
@@ -178,6 +196,7 @@ public class GunShooter : MonoBehaviour
         }
 
         ShowWeaponFeedback("已插入满弹匣");
+        visualController.NotifyMagazineInserted();
         TryCompleteRecoveryTimers();
     }
 
@@ -192,6 +211,7 @@ public class GunShooter : MonoBehaviour
 
         BeginReloadTimer();
         ShowWeaponFeedback("已拔出弹匣");
+        visualController.NotifyMagazineRemoved();
     }
 
     private void HandlePullSlide()
@@ -207,6 +227,7 @@ public class GunShooter : MonoBehaviour
         ShowWeaponFeedback(roundEjected
             ? "已拉动枪机，退出膛内弹"
             : "已拉动枪机");
+        visualController.NotifySlidePulled(roundEjected);
     }
 
     private void HandleReleaseSlide()
@@ -221,6 +242,7 @@ public class GunShooter : MonoBehaviour
         ShowWeaponFeedback(pistolState.RoundInChamber
             ? "已释放枪机，子弹上膛"
             : "已释放枪机，膛内无弹");
+        visualController.NotifySlideReleased();
         TryCompleteRecoveryTimers();
     }
 
@@ -236,6 +258,7 @@ public class GunShooter : MonoBehaviour
         ShowWeaponFeedback(pistolState.RoundInChamber
             ? "已解除空仓挂机，子弹上膛"
             : "已解除空仓挂机，膛内无弹");
+        visualController.NotifySlideLockReleased();
         TryCompleteRecoveryTimers();
     }
 
@@ -354,6 +377,7 @@ public class GunShooter : MonoBehaviour
     {
         nextAllowedShootTime = Time.time + GetShotCooldown();
         RegisterFiredShot();
+        visualController.NotifyShotFired();
 
         PlayGunShot();
 
@@ -456,6 +480,13 @@ public class GunShooter : MonoBehaviour
         {
             pistolState.ResetToConfiguredState();
         }
+
+        if (visualController == null)
+        {
+            InitVisualController();
+        }
+
+        visualController.ResetVisualState();
     }
 
     private float GetShotCooldown()

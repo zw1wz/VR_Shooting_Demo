@@ -800,6 +800,7 @@ GameObject:
   - component: {fileID: 417375402}
   - component: {fileID: 417375406}
   - component: {fileID: 417375407}
+  - component: {fileID: 417375408}
   - component: {fileID: 417375404}
   - component: {fileID: 417375405}
   m_Layer: 0
@@ -826,6 +827,7 @@ MonoBehaviour:
   shootDistance: 100
   pistolState: {fileID: 417375406}
   weaponInputSource: {fileID: 417375407}
+  visualController: {fileID: 417375408}
   fireRateRoundsPerMinute: 300
   shotInputBufferTime: 0.15
   muzzleFlash: {fileID: 561241566}
@@ -889,6 +891,43 @@ MonoBehaviour:
   pullSlideKey: 102
   releaseSlideKey: 103
   releaseSlideLockKey: 118
+--- !u!114 &417375408
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 417375401}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3c79c73700f245769e97142b616307e3, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  pistolState: {fileID: 417375406}
+  createPrototypeVisuals: 1
+  slideTransform: {fileID: 0}
+  magazineTransform: {fileID: 0}
+  triggerTransform: {fileID: 0}
+  ejectionPoint: {fileID: 0}
+  slideTravel: 0.18
+  slideMoveSpeed: 24
+  shotSlideDuration: 0.12
+  magazineDropDistance: 0.34
+  magazineMoveSpeed: 9
+  triggerPullAngle: 16
+  triggerMoveSpeed: 18
+  ejectCasings: 1
+  casingLifetime: 3
+  casingRightForce: 1.8
+  casingUpForce: 1.5
+  casingForwardForce: 0.4
+  casingTorque: 6
+  actionAudioSource: {fileID: 0}
+  slidePulledClip: {fileID: 0}
+  slideReleasedClip: {fileID: 0}
+  magazineInsertedClip: {fileID: 0}
+  magazineRemovedClip: {fileID: 0}
+  slideLockedClip: {fileID: 0}
 --- !u!4 &417375403
 Transform:
   m_ObjectHideFlags: 0

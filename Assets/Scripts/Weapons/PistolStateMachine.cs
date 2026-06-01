@@ -41,6 +41,11 @@ public class PistolStateMachine : MonoBehaviour
         get { return slideLocked; }
     }
 
+    public bool TriggerHeld
+    {
+        get { return triggerHeld; }
+    }
+
     public bool CanFire
     {
         get { return roundInChamber && !slidePulled && !slideLocked; }
