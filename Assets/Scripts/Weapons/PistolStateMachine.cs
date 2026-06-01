@@ -5,6 +5,7 @@ public enum PistolTriggerResult
     None,
     Fired,
     DryFire,
+    SlidePulled,
     SlideLocked,
     TriggerHeld
 }
@@ -83,20 +84,32 @@ public class PistolStateMachine : MonoBehaviour
         LastTriggerResult = PistolTriggerResult.None;
     }
 
-    public void InsertFullMagazine()
+    public bool InsertFullMagazine()
     {
         magazine.Configure(config.NormalizedMagazineCapacity, true);
         magazine.LoadFull();
         magazineInserted = true;
+        return true;
     }
 
-    public void RemoveMagazine()
+    public bool RemoveMagazine()
     {
+        if (!magazineInserted)
+        {
+            return false;
+        }
+
         magazineInserted = false;
+        return true;
     }
 
-    public void PullSlide()
+    public bool PullSlide()
     {
+        if (slidePulled)
+        {
+            return false;
+        }
+
         slidePulled = true;
         slideLocked = false;
 
@@ -104,28 +117,32 @@ public class PistolStateMachine : MonoBehaviour
         {
             roundInChamber = false;
         }
+
+        return true;
     }
 
-    public void ReleaseSlide()
+    public bool ReleaseSlide()
     {
         if (!slidePulled && !slideLocked)
         {
-            return;
+            return false;
         }
 
         slidePulled = false;
         ChamberRoundOrCloseEmpty();
+        return true;
     }
 
-    public void ReleaseSlideLock()
+    public bool ReleaseSlideLock()
     {
         if (!slideLocked)
         {
-            return;
+            return false;
         }
 
         slideLocked = false;
         ChamberRoundOrCloseEmpty();
+        return true;
     }
 
     public PistolTriggerResult PressTrigger()
@@ -138,7 +155,13 @@ public class PistolStateMachine : MonoBehaviour
 
         triggerHeld = true;
 
-        if (slideLocked || slidePulled)
+        if (slidePulled)
+        {
+            LastTriggerResult = PistolTriggerResult.SlidePulled;
+            return LastTriggerResult;
+        }
+
+        if (slideLocked)
         {
             LastTriggerResult = PistolTriggerResult.SlideLocked;
             return LastTriggerResult;
@@ -170,10 +193,41 @@ public class PistolStateMachine : MonoBehaviour
     {
         string magazineText = magazineInserted
             ? magazine.AmmoCount + "/" + magazine.Capacity
-            : "OUT";
+            : "已拔出";
 
         string chamberText = roundInChamber ? "+1" : "+0";
-        return config.WeaponName + " | Ammo " + magazineText + " " + chamberText + " | " + GetStateLabel();
+        return config.WeaponName + " | 弹匣 " + magazineText + " " + chamberText + " | " + GetStateLabel();
+    }
+
+    public string GetHudText()
+    {
+        string magazineText = magazineInserted
+            ? magazine.AmmoCount + "/" + magazine.Capacity
+            : "已拔出";
+
+        return config.WeaponName
+            + "\n弹匣    " + magazineText
+            + "\n膛内    " + (roundInChamber ? "有弹" : "无弹")
+            + "\n枪机    " + GetSlideLabel();
+    }
+
+    public string GetTriggerFeedbackText(PistolTriggerResult result)
+    {
+        switch (result)
+        {
+            case PistolTriggerResult.DryFire:
+                return magazineInserted
+                    ? "空击：膛内无弹"
+                    : "空击：未插入弹匣";
+            case PistolTriggerResult.SlidePulled:
+                return "无法射击：请先释放枪机";
+            case PistolTriggerResult.SlideLocked:
+                return "无法射击：当前为空仓挂机";
+            case PistolTriggerResult.TriggerHeld:
+                return "请先松开扳机，再重新扣动";
+            default:
+                return string.Empty;
+        }
     }
 
     private void CycleSlideAfterShot()
@@ -208,24 +262,34 @@ public class PistolStateMachine : MonoBehaviour
     {
         if (slidePulled)
         {
-            return "SLIDE PULLED";
+            return "枪机后拉";
         }
 
         if (slideLocked)
         {
-            return "SLIDE LOCK";
+            return "空仓挂机";
         }
 
         if (!magazineInserted)
         {
-            return roundInChamber ? "CHAMBERED" : "NO MAG";
+            return roundInChamber ? "膛内有弹" : "无弹匣";
         }
 
         if (roundInChamber)
         {
-            return "READY";
+            return "可射击";
         }
 
-        return "EMPTY";
+        return "膛内无弹";
+    }
+
+    private string GetSlideLabel()
+    {
+        if (slidePulled)
+        {
+            return "后拉";
+        }
+
+        return slideLocked ? "空仓挂机" : "就绪";
     }
 }

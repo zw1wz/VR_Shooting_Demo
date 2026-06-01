@@ -836,6 +836,7 @@ MonoBehaviour:
   gunAudioSource: {fileID: 417375405}
   gunShotClip: {fileID: 8300000, guid: 43d054a8c7e98ff418a7a442da90fd97, type: 3}
   dryFireClip: {fileID: 0}
+  feedbackMessageDuration: 1.4
 --- !u!114 &417375406
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -7241,6 +7242,8 @@ MonoBehaviour:
   applyRuntimeUITheme: 1
   gunShooter: {fileID: 417375402}
   showWeaponStatusInHud: 1
+  weaponStatusText: {fileID: 0}
+  weaponFeedbackText: {fileID: 0}
 --- !u!4 &1230544568
 Transform:
   m_ObjectHideFlags: 0

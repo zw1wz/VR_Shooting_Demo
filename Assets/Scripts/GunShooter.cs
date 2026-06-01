@@ -27,9 +27,15 @@ public class GunShooter : MonoBehaviour
     public AudioClip gunShotClip;
     public AudioClip dryFireClip;
 
+    [Header("Weapon Feedback")]
+    public float feedbackMessageDuration = 1.4f;
+
     private IWeaponInput weaponInput;
+    private AudioClip generatedDryFireClip;
     private float nextAllowedShootTime;
     private float bufferedShotExpireTime = -1f;
+    private string weaponFeedbackText = string.Empty;
+    private float weaponFeedbackExpireTime = -1f;
 
     private void Start()
     {
@@ -107,6 +113,15 @@ public class GunShooter : MonoBehaviour
             gunShotClip.LoadAudioData();
             gunAudioSource.clip = gunShotClip;
         }
+
+        if (dryFireClip != null)
+        {
+            dryFireClip.LoadAudioData();
+        }
+        else
+        {
+            generatedDryFireClip = CreateDryFireClip();
+        }
     }
 
     private void HandleWeaponOperationInput()
@@ -119,26 +134,50 @@ public class GunShooter : MonoBehaviour
         if (weaponInput.InsertMagazinePressedThisFrame)
         {
             pistolState.InsertFullMagazine();
+            ShowWeaponFeedback("已插入满弹匣");
         }
 
         if (weaponInput.RemoveMagazinePressedThisFrame)
         {
-            pistolState.RemoveMagazine();
+            ShowWeaponFeedback(
+                pistolState.RemoveMagazine()
+                    ? "已拔出弹匣"
+                    : "当前没有可拔出的弹匣"
+            );
         }
 
         if (weaponInput.SlidePulledThisFrame)
         {
-            pistolState.PullSlide();
+            bool roundEjected = pistolState.RoundInChamber;
+            ShowWeaponFeedback(
+                pistolState.PullSlide()
+                    ? roundEjected
+                        ? "已拉动枪机，退出膛内弹"
+                        : "已拉动枪机"
+                    : "枪机已经处于后拉状态"
+            );
         }
 
         if (weaponInput.SlideReleasedThisFrame)
         {
-            pistolState.ReleaseSlide();
+            ShowWeaponFeedback(
+                pistolState.ReleaseSlide()
+                    ? pistolState.RoundInChamber
+                        ? "已释放枪机，子弹上膛"
+                        : "已释放枪机，膛内无弹"
+                    : "枪机尚未后拉"
+            );
         }
 
         if (weaponInput.SlideLockReleasedThisFrame)
         {
-            pistolState.ReleaseSlideLock();
+            ShowWeaponFeedback(
+                pistolState.ReleaseSlideLock()
+                    ? pistolState.RoundInChamber
+                        ? "已解除空仓挂机，子弹上膛"
+                        : "已解除空仓挂机，膛内无弹"
+                    : "当前没有空仓挂机"
+            );
         }
     }
 
@@ -231,6 +270,8 @@ public class GunShooter : MonoBehaviour
         {
             PlayDryFire();
         }
+
+        ShowWeaponFeedback(pistolState.GetTriggerFeedbackText(result));
     }
 
     private void ClearBufferedShot()
@@ -269,6 +310,11 @@ public class GunShooter : MonoBehaviour
         }
 
         GameManager.Instance.RecordShot(hitTarget, hitDistance);
+
+        if (pistolState != null && pistolState.SlideLocked)
+        {
+            ShowWeaponFeedback("弹匣已空，进入空仓挂机");
+        }
     }
 
     private bool CanShootByFireRate()
@@ -280,15 +326,36 @@ public class GunShooter : MonoBehaviour
     {
         if (pistolState == null)
         {
-            return "Weapon offline";
+            return "武器未连接";
         }
 
         return pistolState.GetStatusLine();
     }
 
+    public string GetWeaponHudText()
+    {
+        if (pistolState == null)
+        {
+            return "武器未连接";
+        }
+
+        return pistolState.GetHudText();
+    }
+
+    public string GetWeaponFeedbackText()
+    {
+        if (Time.time > weaponFeedbackExpireTime)
+        {
+            return string.Empty;
+        }
+
+        return weaponFeedbackText;
+    }
+
     public void ResetWeaponState()
     {
         ClearBufferedShot();
+        ClearWeaponFeedback();
         nextAllowedShootTime = 0f;
 
         if (pistolState == null)
@@ -357,7 +424,8 @@ public class GunShooter : MonoBehaviour
 
     private void PlayDryFire()
     {
-        if (gunAudioSource == null || dryFireClip == null)
+        AudioClip clip = dryFireClip != null ? dryFireClip : generatedDryFireClip;
+        if (gunAudioSource == null || clip == null)
         {
             return;
         }
@@ -366,6 +434,51 @@ public class GunShooter : MonoBehaviour
         gunAudioSource.volume = 1f;
         gunAudioSource.mute = false;
         gunAudioSource.spatialBlend = 0f;
-        gunAudioSource.PlayOneShot(dryFireClip, 1f);
+        gunAudioSource.PlayOneShot(clip, 1f);
+    }
+
+    private void ShowWeaponFeedback(string message)
+    {
+        if (string.IsNullOrEmpty(message))
+        {
+            return;
+        }
+
+        weaponFeedbackText = message;
+        weaponFeedbackExpireTime = Time.time + Mathf.Max(0f, feedbackMessageDuration);
+    }
+
+    private void ClearWeaponFeedback()
+    {
+        weaponFeedbackText = string.Empty;
+        weaponFeedbackExpireTime = -1f;
+    }
+
+    private static AudioClip CreateDryFireClip()
+    {
+        const int sampleRate = 44100;
+        const float duration = 0.11f;
+
+        int sampleCount = Mathf.CeilToInt(sampleRate * duration);
+        float[] samples = new float[sampleCount];
+
+        for (int i = 0; i < sampleCount; i++)
+        {
+            float t = (float)i / sampleRate;
+            float firstClick = Mathf.Exp(-t * 125f);
+            float secondClick = t >= 0.032f
+                ? Mathf.Exp(-(t - 0.032f) * 165f) * 0.48f
+                : 0f;
+            float noise = Mathf.Sin(i * 12.9898f) * 43758.5453f;
+            noise = (noise - Mathf.Floor(noise)) * 2f - 1f;
+            float click = Mathf.Sin(2f * Mathf.PI * 1650f * t) * 0.45f + noise * 0.55f;
+            float body = Mathf.Sin(2f * Mathf.PI * 310f * t) * Mathf.Exp(-t * 55f) * 0.22f;
+            samples[i] = Mathf.Clamp(click * (firstClick + secondClick) * 0.82f + body, -0.95f, 0.95f);
+        }
+
+        AudioClip clip = AudioClip.Create("Generated_DryFire", sampleCount, 1, sampleRate, false);
+        clip.SetData(samples, 0);
+
+        return clip;
     }
 }

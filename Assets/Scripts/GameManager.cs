@@ -67,6 +67,8 @@ public class GameManager : MonoBehaviour
     [Header("Weapon UI")]
     public GunShooter gunShooter;
     public bool showWeaponStatusInHud = true;
+    public TMP_Text weaponStatusText;
+    public TMP_Text weaponFeedbackText;
 
     private enum GameState
     {
@@ -126,6 +128,7 @@ public class GameManager : MonoBehaviour
     private void Update()
     {
         HandleDebugInput();
+        UpdateWeaponUI();
 
         if (state == GameState.Shooting)
         {
@@ -171,6 +174,38 @@ public class GameManager : MonoBehaviour
         {
             gunShooter = FindObjectOfType<GunShooter>();
         }
+
+        weaponStatusText = EnsureWeaponHudText(weaponStatusText, "WeaponStatusText");
+        weaponFeedbackText = EnsureWeaponHudText(weaponFeedbackText, "WeaponFeedbackText");
+        UpdateWeaponUI();
+    }
+
+    private TMP_Text EnsureWeaponHudText(TMP_Text currentText, string objectName)
+    {
+        if (currentText != null || shootingPanel == null)
+        {
+            return currentText;
+        }
+
+        Transform existing = shootingPanel.transform.Find(objectName);
+        if (existing != null)
+        {
+            return existing.GetComponent<TMP_Text>();
+        }
+
+        GameObject textObject = new GameObject(
+            objectName,
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(TextMeshProUGUI)
+        );
+
+        textObject.layer = shootingPanel.layer;
+        textObject.transform.SetParent(shootingPanel.transform, false);
+
+        TMP_Text text = textObject.GetComponent<TMP_Text>();
+        text.raycastTarget = false;
+        return text;
     }
 
     private AudioSource EnsureAudioSource(AudioSource source)
@@ -692,12 +727,12 @@ public class GameManager : MonoBehaviour
 
         if (timeText != null)
         {
-            timeText.text = "Time: " + currentTime.ToString("F3") + "s";
+            timeText.text = "时间: " + currentTime.ToString("F3") + " 秒";
         }
 
         if (bulletText != null)
         {
-            bulletText.text = "Bullets: " + shotRecords.Count + "/" + bulletCount;
+            bulletText.text = "已射击: " + shotRecords.Count + "/" + bulletCount;
         }
 
         if (scoreText != null)
@@ -708,12 +743,43 @@ public class GameManager : MonoBehaviour
 
     private string GetScoreStatusText()
     {
-        if (!showWeaponStatusInHud || gunShooter == null)
+        if (!showWeaponStatusInHud || gunShooter == null || weaponStatusText != null)
         {
-            return "Score: " + score;
+            return "得分: " + score;
         }
 
-        return "Score: " + score + "\n" + gunShooter.GetWeaponStatusText();
+        return "得分: " + score + "\n" + gunShooter.GetWeaponStatusText();
+    }
+
+    private void UpdateWeaponUI()
+    {
+        if (weaponStatusText != null)
+        {
+            bool showWeaponStatus = showWeaponStatusInHud && gunShooter != null;
+            weaponStatusText.text = showWeaponStatus
+                ? gunShooter.GetWeaponHudText()
+                : string.Empty;
+            SetHudTextActive(weaponStatusText, showWeaponStatus);
+        }
+
+        if (weaponFeedbackText != null)
+        {
+            weaponFeedbackText.text = showWeaponStatusInHud && gunShooter != null
+                ? gunShooter.GetWeaponFeedbackText()
+                : string.Empty;
+            SetHudTextActive(weaponFeedbackText, !string.IsNullOrEmpty(weaponFeedbackText.text));
+        }
+    }
+
+    private static void SetHudTextActive(TMP_Text text, bool active)
+    {
+        text.gameObject.SetActive(active);
+
+        Transform backplate = text.transform.parent.Find(text.gameObject.name + "_Backplate");
+        if (backplate != null)
+        {
+            backplate.gameObject.SetActive(active);
+        }
     }
 
     private void UpdateResultUI()
@@ -724,16 +790,16 @@ public class GameManager : MonoBehaviour
         }
 
         StringBuilder builder = new StringBuilder();
-        builder.AppendLine("FINAL SCORE    " + score);
-        builder.AppendLine("HITS           " + GetHitCount() + "/" + bulletCount);
-        builder.AppendLine("HIT RATE       " + GetHitRate().ToString("F1") + "%");
+        builder.AppendLine("最终得分    " + score);
+        builder.AppendLine("命中次数    " + GetHitCount() + "/" + bulletCount);
+        builder.AppendLine("命中率      " + GetHitRate().ToString("F1") + "%");
         builder.AppendLine();
-        builder.AppendLine("SHOT LOG");
+        builder.AppendLine("射击记录");
         builder.AppendLine("------------------------------------------------");
 
         foreach (ShotRecord record in shotRecords)
         {
-            string result = record.Hit ? "Hit " + record.TargetName : "Miss";
+            string result = record.Hit ? "命中 " + record.TargetName : "未命中";
             builder
                 .Append("#").Append(record.Index.ToString("00"))
                 .Append("    ").Append(record.Time.ToString("F3")).Append("s")
