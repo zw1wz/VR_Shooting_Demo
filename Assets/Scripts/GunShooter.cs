@@ -224,9 +224,7 @@ public class GunShooter : MonoBehaviour
             return;
         }
 
-        ShowWeaponFeedback(roundEjected
-            ? "已拉动枪机，退出膛内弹"
-            : "已拉动枪机");
+        ShowWeaponFeedback(GetPullSlideFeedbackText(roundEjected));
         visualController.NotifySlidePulled(roundEjected);
     }
 
@@ -239,9 +237,7 @@ public class GunShooter : MonoBehaviour
             return;
         }
 
-        ShowWeaponFeedback(pistolState.RoundInChamber
-            ? "已释放枪机，子弹上膛"
-            : "已释放枪机，膛内无弹");
+        ShowWeaponFeedback(GetReleaseSlideFeedbackText("已释放枪机"));
         visualController.NotifySlideReleased();
         TryCompleteRecoveryTimers();
     }
@@ -255,11 +251,38 @@ public class GunShooter : MonoBehaviour
             return;
         }
 
-        ShowWeaponFeedback(pistolState.RoundInChamber
-            ? "已解除空仓挂机，子弹上膛"
-            : "已解除空仓挂机，膛内无弹");
+        ShowWeaponFeedback(GetReleaseSlideFeedbackText("已解除空仓挂机"));
         visualController.NotifySlideLockReleased();
         TryCompleteRecoveryTimers();
+    }
+
+    private string GetReleaseSlideFeedbackText(string actionText)
+    {
+        if (pistolState.RoundInChamber)
+        {
+            return actionText + "，子弹上膛";
+        }
+
+        if (pistolState.SlideLocked)
+        {
+            return actionText + "，空弹匣保持空仓挂机";
+        }
+
+        return actionText + "，膛内无弹";
+    }
+
+    private string GetPullSlideFeedbackText(bool roundEjected)
+    {
+        if (pistolState.SlideLocked)
+        {
+            return roundEjected
+                ? "已拉动枪机，退出膛内弹并空仓挂机"
+                : "已拉动枪机，空弹匣保持空仓挂机";
+        }
+
+        return roundEjected
+            ? "已拉动枪机，退出膛内弹"
+            : "已拉动枪机";
     }
 
     private static void ConfigureAudioSource(AudioSource source)

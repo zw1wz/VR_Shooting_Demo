@@ -905,11 +905,13 @@ MonoBehaviour:
   m_EditorClassIdentifier:
   pistolState: {fileID: 417375406}
   createPrototypeVisuals: 1
+  createStyledPrototypeModel: 1
+  hideLegacyBlockoutParts: 1
   slideTransform: {fileID: 0}
   magazineTransform: {fileID: 0}
   triggerTransform: {fileID: 0}
   ejectionPoint: {fileID: 0}
-  slideTravel: 0.18
+  slideTravel: 0.1
   slideMoveSpeed: 24
   shotSlideDuration: 0.12
   magazineDropDistance: 0.34
@@ -7433,7 +7435,7 @@ Transform:
   m_GameObject: {fileID: 1280506043}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 1, z: 0.35}
+  m_LocalPosition: {x: 0, y: 1.02, z: 0.365}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:

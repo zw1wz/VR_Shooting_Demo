@@ -6,13 +6,15 @@ public class PistolVisualController : MonoBehaviour
 
     [Header("Visual Parts")]
     public bool createPrototypeVisuals = true;
+    public bool createStyledPrototypeModel = true;
+    public bool hideLegacyBlockoutParts = true;
     public Transform slideTransform;
     public Transform magazineTransform;
     public Transform triggerTransform;
     public Transform ejectionPoint;
 
     [Header("Slide")]
-    public float slideTravel = 0.18f;
+    public float slideTravel = 0.1f;
     public float slideMoveSpeed = 24f;
     public float shotSlideDuration = 0.12f;
 
@@ -46,6 +48,9 @@ public class PistolVisualController : MonoBehaviour
     private Quaternion triggerRestRotation;
     private float shotAnimationStartTime = -1f;
     private bool initialized;
+
+    private const string StyledModelRootName = "G17StylePrototype";
+    private const float GripRakeAngle = 13f;
 
     private void Start()
     {
@@ -279,6 +284,13 @@ public class PistolVisualController : MonoBehaviour
 
     private void EnsurePrototypeVisuals()
     {
+        if (createStyledPrototypeModel)
+        {
+            HideLegacyBlockoutParts();
+            EnsureStyledPrototypeModel();
+            return;
+        }
+
         if (slideTransform == null)
         {
             slideTransform = EnsurePrototypeCube(
@@ -326,6 +338,468 @@ public class PistolVisualController : MonoBehaviour
         }
     }
 
+    private void EnsureStyledPrototypeModel()
+    {
+        Transform modelRoot = EnsureEmptyChild(
+            transform,
+            StyledModelRootName,
+            Vector3.zero,
+            Quaternion.identity
+        );
+
+        Transform frameRoot = EnsureEmptyChild(
+            modelRoot,
+            "G17_Frame",
+            Vector3.zero,
+            Quaternion.identity
+        );
+
+        slideTransform = EnsureEmptyChild(
+            modelRoot,
+            "G17_Slide",
+            new Vector3(0f, 1.04f, 0.015f),
+            Quaternion.identity
+        );
+
+        magazineTransform = EnsureEmptyChild(
+            modelRoot,
+            "G17_Magazine",
+            new Vector3(0f, 0.56f, -0.245f),
+            Quaternion.Euler(GripRakeAngle, 0f, 0f)
+        );
+
+        triggerTransform = EnsureEmptyChild(
+            modelRoot,
+            "G17_Trigger",
+            new Vector3(0f, 0.845f, 0.025f),
+            Quaternion.identity
+        );
+
+        BuildStyledSlide(slideTransform);
+        BuildStyledFrame(frameRoot);
+        BuildStyledMagazine(magazineTransform);
+        BuildStyledTrigger(triggerTransform);
+        EnsureStyledEjectionPoint(slideTransform);
+    }
+
+    private void BuildStyledSlide(Transform slideRoot)
+    {
+        Color slideColor = new Color(0.055f, 0.06f, 0.065f);
+        Color slideEdgeColor = new Color(0.025f, 0.027f, 0.03f);
+        Color sightColor = new Color(0.01f, 0.012f, 0.014f);
+        Color markingColor = new Color(0.82f, 0.84f, 0.78f);
+        Color portColor = new Color(0.012f, 0.013f, 0.015f);
+        Color chamberColor = new Color(0.62f, 0.56f, 0.42f);
+
+        EnsureBox(
+            slideRoot,
+            "SlideBlock",
+            Vector3.zero,
+            new Vector3(0.29f, 0.118f, 0.74f),
+            slideColor
+        );
+
+        EnsureBox(
+            slideRoot,
+            "SlideLowerLip",
+            new Vector3(0f, -0.069f, 0f),
+            new Vector3(0.252f, 0.034f, 0.68f),
+            slideEdgeColor
+        );
+
+        EnsureBox(
+            slideRoot,
+            "SlideTopFlat",
+            new Vector3(0f, 0.069f, 0f),
+            new Vector3(0.22f, 0.022f, 0.66f),
+            new Color(0.075f, 0.08f, 0.085f)
+        );
+
+        EnsureBox(
+            slideRoot,
+            "FrontFace",
+            new Vector3(0f, 0f, 0.382f),
+            new Vector3(0.255f, 0.105f, 0.022f),
+            slideEdgeColor
+        );
+
+        EnsureBox(
+            slideRoot,
+            "RearFace",
+            new Vector3(0f, 0f, -0.382f),
+            new Vector3(0.255f, 0.105f, 0.022f),
+            slideEdgeColor
+        );
+
+        EnsureCylinder(
+            slideRoot,
+            "VisibleBarrel",
+            new Vector3(0f, -0.018f, 0.335f),
+            Quaternion.Euler(90f, 0f, 0f),
+            new Vector3(0.04f, 0.13f, 0.04f),
+            new Color(0.18f, 0.18f, 0.17f)
+        );
+
+        EnsureBox(
+            slideRoot,
+            "EjectionPortCutout",
+            new Vector3(0.149f, 0.022f, 0.1f),
+            new Vector3(0.018f, 0.055f, 0.17f),
+            portColor
+        );
+
+        EnsureBox(
+            slideRoot,
+            "EjectionPortChamber",
+            new Vector3(0.16f, 0.018f, 0.095f),
+            new Vector3(0.012f, 0.038f, 0.095f),
+            chamberColor
+        );
+
+        EnsureBox(
+            slideRoot,
+            "FrontSight",
+            new Vector3(0f, 0.091f, 0.315f),
+            new Vector3(0.052f, 0.03f, 0.038f),
+            sightColor
+        );
+
+        EnsureBox(
+            slideRoot,
+            "FrontSightDot",
+            new Vector3(0f, 0.108f, 0.323f),
+            new Vector3(0.018f, 0.006f, 0.01f),
+            markingColor
+        );
+
+        EnsureBox(
+            slideRoot,
+            "RearSight",
+            new Vector3(0f, 0.093f, -0.31f),
+            new Vector3(0.11f, 0.032f, 0.045f),
+            sightColor
+        );
+
+        EnsureBox(
+            slideRoot,
+            "RearSightNotch",
+            new Vector3(0f, 0.112f, -0.302f),
+            new Vector3(0.035f, 0.006f, 0.012f),
+            markingColor
+        );
+
+        for (int i = 0; i < 5; i++)
+        {
+            float z = -0.31f + i * 0.026f;
+            EnsureSerration(slideRoot, "RearSerrationR_" + i, 0.151f, z);
+            EnsureSerration(slideRoot, "RearSerrationL_" + i, -0.151f, z);
+        }
+
+        for (int i = 0; i < 4; i++)
+        {
+            float z = 0.205f + i * 0.026f;
+            EnsureSerration(slideRoot, "FrontSerrationR_" + i, 0.151f, z);
+            EnsureSerration(slideRoot, "FrontSerrationL_" + i, -0.151f, z);
+        }
+    }
+
+    private void BuildStyledFrame(Transform frameRoot)
+    {
+        Color polymerColor = new Color(0.035f, 0.04f, 0.045f);
+        Color polymerEdgeColor = new Color(0.015f, 0.017f, 0.02f);
+        Color gripTextureColor = new Color(0.08f, 0.085f, 0.08f);
+
+        EnsureBox(
+            frameRoot,
+            "DustCover",
+            new Vector3(0f, 0.965f, 0.08f),
+            new Vector3(0.255f, 0.12f, 0.55f),
+            polymerColor
+        );
+
+        EnsureBox(
+            frameRoot,
+            "FrameBeavertail",
+            new Vector3(0f, 0.955f, -0.29f),
+            new Vector3(0.235f, 0.105f, 0.18f),
+            polymerColor
+        );
+
+        EnsureBox(
+            frameRoot,
+            "FrameUpperRail",
+            new Vector3(0f, 1.015f, 0.005f),
+            new Vector3(0.232f, 0.04f, 0.64f),
+            polymerEdgeColor
+        );
+
+        EnsureBox(
+            frameRoot,
+            "FrameSlideShadow",
+            new Vector3(0f, 0.996f, 0.015f),
+            new Vector3(0.265f, 0.018f, 0.68f),
+            new Color(0.012f, 0.014f, 0.016f)
+        );
+
+        EnsureBox(
+            frameRoot,
+            "Grip",
+            new Vector3(0f, 0.675f, -0.245f),
+            Quaternion.Euler(GripRakeAngle, 0f, 0f),
+            new Vector3(0.225f, 0.58f, 0.195f),
+            polymerColor
+        );
+
+        EnsureBox(
+            frameRoot,
+            "GripBackstrap",
+            new Vector3(0f, 0.675f, -0.345f),
+            Quaternion.Euler(GripRakeAngle, 0f, 0f),
+            new Vector3(0.19f, 0.54f, 0.035f),
+            polymerEdgeColor
+        );
+
+        EnsureBox(
+            frameRoot,
+            "GripTangBridge",
+            new Vector3(0f, 0.88f, -0.245f),
+            Quaternion.Euler(GripRakeAngle, 0f, 0f),
+            new Vector3(0.22f, 0.19f, 0.2f),
+            polymerColor
+        );
+
+        EnsureBox(
+            frameRoot,
+            "FrontStrapBlend",
+            new Vector3(0f, 0.775f, -0.105f),
+            Quaternion.Euler(GripRakeAngle, 0f, 0f),
+            new Vector3(0.19f, 0.18f, 0.055f),
+            polymerColor
+        );
+
+        EnsureBox(
+            frameRoot,
+            "MagazineWellLip",
+            new Vector3(0f, 0.42f, -0.245f),
+            Quaternion.Euler(GripRakeAngle, 0f, 0f),
+            new Vector3(0.255f, 0.052f, 0.23f),
+            polymerEdgeColor
+        );
+
+        EnsureBox(
+            frameRoot,
+            "AccessoryRail",
+            new Vector3(0f, 0.9f, 0.18f),
+            new Vector3(0.22f, 0.032f, 0.28f),
+            polymerEdgeColor
+        );
+
+        for (int i = 0; i < 4; i++)
+        {
+            EnsureBox(
+                frameRoot,
+                "RailSlot_" + i,
+                new Vector3(0f, 0.875f, 0.065f + i * 0.065f),
+                new Vector3(0.235f, 0.011f, 0.018f),
+                new Color(0.09f, 0.095f, 0.09f)
+            );
+        }
+
+        BuildTriggerGuard(frameRoot, polymerColor);
+        BuildGripTexture(frameRoot, gripTextureColor);
+        BuildControls(frameRoot, polymerEdgeColor);
+    }
+
+    private void BuildTriggerGuard(Transform frameRoot, Color color)
+    {
+        EnsureBox(
+            frameRoot,
+            "TriggerGuardFront",
+            new Vector3(0f, 0.805f, 0.105f),
+            new Vector3(0.18f, 0.2f, 0.04f),
+            color
+        );
+
+        EnsureBox(
+            frameRoot,
+            "TriggerGuardBottom",
+            new Vector3(0f, 0.725f, 0.005f),
+            new Vector3(0.18f, 0.052f, 0.22f),
+            color
+        );
+
+        EnsureBox(
+            frameRoot,
+            "TriggerGuardRear",
+            new Vector3(0f, 0.802f, -0.085f),
+            new Vector3(0.18f, 0.18f, 0.04f),
+            color
+        );
+
+        EnsureBox(
+            frameRoot,
+            "TriggerGuardOpening",
+            new Vector3(0f, 0.805f, 0.005f),
+            new Vector3(0.185f, 0.11f, 0.125f),
+            new Color(0.01f, 0.011f, 0.012f)
+        );
+    }
+
+    private void BuildGripTexture(Transform frameRoot, Color color)
+    {
+        for (int row = 0; row < 5; row++)
+        {
+            float y = 0.49f + row * 0.075f;
+            EnsureBox(
+                frameRoot,
+                "GripFrontRib_" + row,
+                new Vector3(0f, y, -0.145f),
+                Quaternion.Euler(GripRakeAngle, 0f, 0f),
+                new Vector3(0.19f, 0.012f, 0.012f),
+                color
+            );
+        }
+
+        for (int side = 0; side < 2; side++)
+        {
+            float x = side == 0 ? 0.116f : -0.116f;
+            for (int row = 0; row < 4; row++)
+            {
+                EnsureBox(
+                    frameRoot,
+                    "GripSidePatch_" + side + "_" + row,
+                    new Vector3(x, 0.5f + row * 0.085f, -0.245f),
+                    Quaternion.Euler(GripRakeAngle, 0f, 0f),
+                    new Vector3(0.012f, 0.045f, 0.12f),
+                    color
+                );
+            }
+        }
+    }
+
+    private void BuildControls(Transform frameRoot, Color color)
+    {
+        EnsureBox(
+            frameRoot,
+            "SlideStopLever",
+            new Vector3(0.136f, 0.98f, -0.09f),
+            new Vector3(0.02f, 0.035f, 0.11f),
+            color
+        );
+
+        EnsureBox(
+            frameRoot,
+            "MagazineRelease",
+            new Vector3(0.128f, 0.825f, -0.13f),
+            new Vector3(0.025f, 0.045f, 0.04f),
+            color
+        );
+    }
+
+    private void BuildStyledMagazine(Transform magazineRoot)
+    {
+        EnsureBox(
+            magazineRoot,
+            "MagazineBody",
+            Vector3.zero,
+            new Vector3(0.15f, 0.42f, 0.13f),
+            new Color(0.08f, 0.085f, 0.09f)
+        );
+
+        EnsureBox(
+            magazineRoot,
+            "MagazineBasePlate",
+            new Vector3(0f, -0.225f, 0f),
+            new Vector3(0.21f, 0.055f, 0.18f),
+            new Color(0.025f, 0.028f, 0.032f)
+        );
+
+        for (int i = 0; i < 4; i++)
+        {
+            EnsureBox(
+                magazineRoot,
+                "MagazineRib_" + i,
+                new Vector3(0.078f, 0.13f - i * 0.085f, 0f),
+                new Vector3(0.012f, 0.035f, 0.105f),
+                new Color(0.12f, 0.125f, 0.13f)
+            );
+        }
+    }
+
+    private void BuildStyledTrigger(Transform triggerRoot)
+    {
+        EnsureBox(
+            triggerRoot,
+            "TriggerBlade",
+            new Vector3(0f, -0.055f, 0f),
+            Quaternion.Euler(10f, 0f, 0f),
+            new Vector3(0.06f, 0.13f, 0.04f),
+            new Color(0.015f, 0.017f, 0.02f)
+        );
+
+        EnsureBox(
+            triggerRoot,
+            "TriggerSafetyTab",
+            new Vector3(0f, -0.055f, 0.022f),
+            Quaternion.Euler(10f, 0f, 0f),
+            new Vector3(0.022f, 0.1f, 0.012f),
+            new Color(0.08f, 0.085f, 0.09f)
+        );
+    }
+
+    private void EnsureStyledEjectionPoint(Transform slideRoot)
+    {
+        if (ejectionPoint != null)
+        {
+            return;
+        }
+
+        Transform existing = slideRoot.Find("G17_EjectionPoint");
+        if (existing != null)
+        {
+            ejectionPoint = existing;
+            return;
+        }
+
+        GameObject point = new GameObject("G17_EjectionPoint");
+        point.transform.SetParent(slideRoot, false);
+        point.transform.localPosition = new Vector3(0.17f, 0.03f, 0.1f);
+        point.transform.localRotation = Quaternion.identity;
+        ejectionPoint = point.transform;
+    }
+
+    private void EnsureSerration(Transform parent, string name, float x, float z)
+    {
+        EnsureBox(
+            parent,
+            name,
+            new Vector3(x, 0.008f, z),
+            Quaternion.Euler(0f, 0f, 18f * Mathf.Sign(x)),
+            new Vector3(0.012f, 0.095f, 0.012f),
+            new Color(0.018f, 0.02f, 0.023f)
+        );
+    }
+
+    private void HideLegacyBlockoutParts()
+    {
+        if (!hideLegacyBlockoutParts)
+        {
+            return;
+        }
+
+        SetChildActive("GunBody", false);
+        SetChildActive("GunHandle", false);
+    }
+
+    private void SetChildActive(string objectName, bool active)
+    {
+        Transform child = transform.Find(objectName);
+        if (child != null)
+        {
+            child.gameObject.SetActive(active);
+        }
+    }
+
     private Transform EnsurePrototypeCube(
         string objectName,
         Vector3 localPosition,
@@ -353,6 +827,117 @@ public class PistolVisualController : MonoBehaviour
 
         ApplyPrototypeColor(cube, color);
         return cube.transform;
+    }
+
+    private Transform EnsureEmptyChild(
+        Transform parent,
+        string objectName,
+        Vector3 localPosition,
+        Quaternion localRotation)
+    {
+        Transform child = parent.Find(objectName);
+        if (child == null)
+        {
+            GameObject gameObject = new GameObject(objectName);
+            child = gameObject.transform;
+            child.SetParent(parent, false);
+        }
+
+        child.localPosition = localPosition;
+        child.localRotation = localRotation;
+        child.localScale = Vector3.one;
+        child.gameObject.SetActive(true);
+        return child;
+    }
+
+    private Transform EnsureBox(
+        Transform parent,
+        string objectName,
+        Vector3 localPosition,
+        Vector3 localScale,
+        Color color)
+    {
+        return EnsureBox(parent, objectName, localPosition, Quaternion.identity, localScale, color);
+    }
+
+    private Transform EnsureBox(
+        Transform parent,
+        string objectName,
+        Vector3 localPosition,
+        Quaternion localRotation,
+        Vector3 localScale,
+        Color color)
+    {
+        return EnsurePrimitivePart(
+            parent,
+            objectName,
+            PrimitiveType.Cube,
+            localPosition,
+            localRotation,
+            localScale,
+            color
+        );
+    }
+
+    private Transform EnsureCylinder(
+        Transform parent,
+        string objectName,
+        Vector3 localPosition,
+        Quaternion localRotation,
+        Vector3 localScale,
+        Color color)
+    {
+        return EnsurePrimitivePart(
+            parent,
+            objectName,
+            PrimitiveType.Cylinder,
+            localPosition,
+            localRotation,
+            localScale,
+            color
+        );
+    }
+
+    private Transform EnsurePrimitivePart(
+        Transform parent,
+        string objectName,
+        PrimitiveType primitiveType,
+        Vector3 localPosition,
+        Quaternion localRotation,
+        Vector3 localScale,
+        Color color)
+    {
+        Transform existing = parent.Find(objectName);
+        GameObject gameObject;
+
+        if (existing == null)
+        {
+            gameObject = GameObject.CreatePrimitive(primitiveType);
+            gameObject.name = objectName;
+            gameObject.transform.SetParent(parent, false);
+            RemoveCollider(gameObject);
+        }
+        else
+        {
+            gameObject = existing.gameObject;
+        }
+
+        gameObject.transform.localPosition = localPosition;
+        gameObject.transform.localRotation = localRotation;
+        gameObject.transform.localScale = localScale;
+        gameObject.SetActive(true);
+        ApplyPrototypeColor(gameObject, color);
+        return gameObject.transform;
+    }
+
+    private static void RemoveCollider(GameObject gameObject)
+    {
+        Collider collider = gameObject.GetComponent<Collider>();
+        if (collider != null)
+        {
+            collider.enabled = false;
+            Destroy(collider);
+        }
     }
 
     private void EjectCasing()

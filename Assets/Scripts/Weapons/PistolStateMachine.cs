@@ -122,10 +122,9 @@ public class PistolStateMachine : MonoBehaviour
     {
         if (slidePulled)
         {
-            return false;
+            return true;
         }
 
-        slidePulled = true;
         slideLocked = false;
 
         if (roundInChamber)
@@ -133,6 +132,14 @@ public class PistolStateMachine : MonoBehaviour
             roundInChamber = false;
         }
 
+        if (ShouldLockOpenOnEmptyMagazine())
+        {
+            slidePulled = false;
+            slideLocked = true;
+            return true;
+        }
+
+        slidePulled = true;
         return true;
     }
 
@@ -143,8 +150,10 @@ public class PistolStateMachine : MonoBehaviour
             return false;
         }
 
+        bool shouldLockOpenOnEmptyMagazine = slidePulled || slideLocked;
         slidePulled = false;
-        ChamberRoundOrCloseEmpty();
+        slideLocked = false;
+        ChamberRoundOrCloseEmpty(shouldLockOpenOnEmptyMagazine);
         return true;
     }
 
@@ -156,7 +165,7 @@ public class PistolStateMachine : MonoBehaviour
         }
 
         slideLocked = false;
-        ChamberRoundOrCloseEmpty();
+        ChamberRoundOrCloseEmpty(false);
         return true;
     }
 
@@ -260,7 +269,7 @@ public class PistolStateMachine : MonoBehaviour
         }
     }
 
-    private void ChamberRoundOrCloseEmpty()
+    private void ChamberRoundOrCloseEmpty(bool lockOpenOnEmptyMagazine)
     {
         if (magazineInserted && magazine.TryConsumeRound())
         {
@@ -270,7 +279,17 @@ public class PistolStateMachine : MonoBehaviour
         }
 
         roundInChamber = false;
-        slideLocked = false;
+        slideLocked = lockOpenOnEmptyMagazine
+            && magazineInserted
+            && config.LockSlideWhenEmpty;
+    }
+
+    private bool ShouldLockOpenOnEmptyMagazine()
+    {
+        return magazineInserted
+            && magazine != null
+            && !magazine.HasAmmo
+            && (config == null || config.LockSlideWhenEmpty);
     }
 
     private string GetStateLabel()
