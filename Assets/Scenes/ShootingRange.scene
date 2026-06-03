@@ -911,6 +911,11 @@ MonoBehaviour:
   magazineTransform: {fileID: 0}
   triggerTransform: {fileID: 0}
   ejectionPoint: {fileID: 0}
+  enableRecoilAnimation: 1
+  recoilKickBackDistance: 0.055
+  recoilMuzzleRiseAngle: 6
+  recoilDuration: 0.16
+  recoilRecoverySpeed: 28
   slideTravel: 0.1
   slideMoveSpeed: 24
   shotSlideDuration: 0.12
@@ -923,7 +928,9 @@ MonoBehaviour:
   casingRightForce: 1.8
   casingUpForce: 1.5
   casingForwardForce: 0.4
+  casingRandomForce: 0.35
   casingTorque: 6
+  casingRandomTorque: 2
   actionAudioSource: {fileID: 0}
   slidePulledClip: {fileID: 0}
   slideReleasedClip: {fileID: 0}

@@ -55,6 +55,7 @@ public class GunShooter : MonoBehaviour
         InitVisualController();
         InitWeaponInput();
         InitGunAudio();
+        InitMuzzleFlash();
     }
 
     private void Update()
@@ -151,6 +152,39 @@ public class GunShooter : MonoBehaviour
         {
             generatedDryFireClip = CreateDryFireClip();
         }
+    }
+
+    private void InitMuzzleFlash()
+    {
+        if (muzzleFlash == null)
+        {
+            return;
+        }
+
+        if (muzzlePoint != null)
+        {
+            muzzleFlash.transform.SetParent(muzzlePoint, false);
+            muzzleFlash.transform.localPosition = Vector3.zero;
+            muzzleFlash.transform.localRotation = Quaternion.identity;
+        }
+
+        ParticleSystem.MainModule main = muzzleFlash.main;
+        main.loop = false;
+        main.playOnAwake = false;
+        main.duration = 0.06f;
+        main.startLifetime = 0.045f;
+        main.startSpeed = 0.16f;
+        main.startSize = 0.18f;
+        main.startColor = new ParticleSystem.MinMaxGradient(new Color(1f, 0.72f, 0.22f, 0.95f));
+
+        ParticleSystem.EmissionModule emission = muzzleFlash.emission;
+        emission.rateOverTime = 0f;
+        emission.SetBursts(new[]
+        {
+            new ParticleSystem.Burst(0f, 4)
+        });
+
+        muzzleFlash.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
     }
 
     private void HandleWeaponOperationInput()
@@ -406,7 +440,8 @@ public class GunShooter : MonoBehaviour
 
         if (muzzleFlash != null)
         {
-            muzzleFlash.Play();
+            muzzleFlash.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            muzzleFlash.Play(true);
         }
 
         Target hitTarget = null;
@@ -417,6 +452,11 @@ public class GunShooter : MonoBehaviour
         {
             hitTarget = hit.collider.GetComponentInParent<Target>();
             hitDistance = hit.distance;
+            if (hitTarget != null)
+            {
+                hitTarget.PlayHitFeedback(hit.point, hit.normal);
+            }
+
             SpawnHitEffect(hit);
         }
 

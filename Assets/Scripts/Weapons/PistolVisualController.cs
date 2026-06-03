@@ -13,6 +13,13 @@ public class PistolVisualController : MonoBehaviour
     public Transform triggerTransform;
     public Transform ejectionPoint;
 
+    [Header("Recoil")]
+    public bool enableRecoilAnimation = true;
+    public float recoilKickBackDistance = 0.055f;
+    public float recoilMuzzleRiseAngle = 6f;
+    public float recoilDuration = 0.16f;
+    public float recoilRecoverySpeed = 28f;
+
     [Header("Slide")]
     public float slideTravel = 0.1f;
     public float slideMoveSpeed = 24f;
@@ -32,7 +39,9 @@ public class PistolVisualController : MonoBehaviour
     public float casingRightForce = 1.8f;
     public float casingUpForce = 1.5f;
     public float casingForwardForce = 0.4f;
+    public float casingRandomForce = 0.35f;
     public float casingTorque = 6f;
+    public float casingRandomTorque = 2f;
 
     [Header("Optional Audio")]
     public AudioSource actionAudioSource;
@@ -46,7 +55,11 @@ public class PistolVisualController : MonoBehaviour
     private Vector3 magazineInsertedPosition;
     private Vector3 magazineRemovedPosition;
     private Quaternion triggerRestRotation;
+    private Transform recoilTransform;
+    private Vector3 recoilRestPosition;
+    private Quaternion recoilRestRotation;
     private float shotAnimationStartTime = -1f;
+    private float recoilAnimationStartTime = -1f;
     private bool initialized;
 
     private const string StyledModelRootName = "G17StylePrototype";
@@ -60,6 +73,7 @@ public class PistolVisualController : MonoBehaviour
     private void Update()
     {
         Initialize();
+        UpdateRecoilVisual();
         UpdateSlideVisual();
         UpdateMagazineVisual();
         UpdateTriggerVisual();
@@ -98,6 +112,12 @@ public class PistolVisualController : MonoBehaviour
             triggerRestRotation = triggerTransform.localRotation;
         }
 
+        if (recoilTransform != null)
+        {
+            recoilRestPosition = recoilTransform.localPosition;
+            recoilRestRotation = recoilTransform.localRotation;
+        }
+
         initialized = true;
         ResetVisualState();
     }
@@ -105,6 +125,7 @@ public class PistolVisualController : MonoBehaviour
     public void ResetVisualState()
     {
         shotAnimationStartTime = -1f;
+        recoilAnimationStartTime = -1f;
 
         if (!initialized)
         {
@@ -129,12 +150,19 @@ public class PistolVisualController : MonoBehaviour
         {
             triggerTransform.localRotation = GetTargetTriggerRotation();
         }
+
+        if (recoilTransform != null)
+        {
+            recoilTransform.localPosition = recoilRestPosition;
+            recoilTransform.localRotation = recoilRestRotation;
+        }
     }
 
     public void NotifyShotFired()
     {
         Initialize();
         shotAnimationStartTime = Time.time;
+        recoilAnimationStartTime = Time.time;
         EjectCasing();
 
         if (pistolState != null && pistolState.SlideLocked)
@@ -184,6 +212,47 @@ public class PistolVisualController : MonoBehaviour
     {
         Initialize();
         PlayActionClip(slideReleasedClip);
+    }
+
+    private void UpdateRecoilVisual()
+    {
+        if (!enableRecoilAnimation || recoilTransform == null)
+        {
+            return;
+        }
+
+        float recoilAmount = 0f;
+        if (recoilAnimationStartTime >= 0f)
+        {
+            float duration = Mathf.Max(0.01f, recoilDuration);
+            float progress = (Time.time - recoilAnimationStartTime) / duration;
+
+            if (progress >= 1f)
+            {
+                recoilAnimationStartTime = -1f;
+            }
+            else
+            {
+                recoilAmount = GetRecoilCurve(progress);
+            }
+        }
+
+        Vector3 targetPosition = recoilRestPosition
+            + Vector3.back * (recoilKickBackDistance * recoilAmount);
+        Quaternion targetRotation = recoilRestRotation
+            * Quaternion.Euler(-recoilMuzzleRiseAngle * recoilAmount, 0f, 0f);
+
+        recoilTransform.localPosition = DampVector3(
+            recoilTransform.localPosition,
+            targetPosition,
+            recoilRecoverySpeed
+        );
+
+        recoilTransform.localRotation = Quaternion.Slerp(
+            recoilTransform.localRotation,
+            targetRotation,
+            GetDampFactor(recoilRecoverySpeed)
+        );
     }
 
     private void UpdateSlideVisual()
@@ -346,6 +415,7 @@ public class PistolVisualController : MonoBehaviour
             Vector3.zero,
             Quaternion.identity
         );
+        recoilTransform = modelRoot;
 
         Transform frameRoot = EnsureEmptyChild(
             modelRoot,
@@ -957,12 +1027,30 @@ public class PistolVisualController : MonoBehaviour
         IgnoreWeaponCollisions(casing.GetComponent<Collider>());
 
         Rigidbody body = casing.AddComponent<Rigidbody>();
-        Vector3 force = transform.right * casingRightForce
-            + transform.up * casingUpForce
-            + transform.forward * casingForwardForce;
+        body.mass = 0.012f;
+        body.drag = 0.02f;
+        body.angularDrag = 0.04f;
+        body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+
+        float randomForce = Mathf.Max(0f, casingRandomForce);
+        Vector3 force = transform.right * Random.Range(
+                Mathf.Max(0f, casingRightForce - randomForce),
+                casingRightForce + randomForce
+            )
+            + transform.up * Random.Range(
+                Mathf.Max(0f, casingUpForce - randomForce),
+                casingUpForce + randomForce
+            )
+            + transform.forward * Random.Range(
+                casingForwardForce - randomForce,
+                casingForwardForce + randomForce
+            );
 
         body.AddForce(force, ForceMode.Impulse);
-        body.AddTorque(Random.onUnitSphere * casingTorque, ForceMode.Impulse);
+        body.AddTorque(
+            Random.onUnitSphere * (casingTorque + Random.Range(0f, Mathf.Max(0f, casingRandomTorque))),
+            ForceMode.Impulse
+        );
         Destroy(casing, Mathf.Max(0.1f, casingLifetime));
     }
 
@@ -1013,6 +1101,18 @@ public class PistolVisualController : MonoBehaviour
     private static Vector3 DampVector3(Vector3 current, Vector3 target, float speed)
     {
         return Vector3.Lerp(current, target, GetDampFactor(speed));
+    }
+
+    private static float GetRecoilCurve(float progress)
+    {
+        float clampedProgress = Mathf.Clamp01(progress);
+        if (clampedProgress < 0.18f)
+        {
+            return clampedProgress / 0.18f;
+        }
+
+        float recoveryProgress = (clampedProgress - 0.18f) / 0.82f;
+        return Mathf.Pow(1f - recoveryProgress, 1.75f);
     }
 
     private static float GetDampFactor(float speed)
