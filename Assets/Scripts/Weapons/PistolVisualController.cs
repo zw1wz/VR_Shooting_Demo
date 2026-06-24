@@ -1,5 +1,13 @@
 using UnityEngine;
 
+public enum Glock17MaterialVariant
+{
+    Base,
+    Dirty,
+    Rust,
+    PortedSlideBarrel
+}
+
 public class PistolVisualController : MonoBehaviour
 {
     public PistolStateMachine pistolState;
@@ -12,6 +20,57 @@ public class PistolVisualController : MonoBehaviour
     public Transform magazineTransform;
     public Transform triggerTransform;
     public Transform ejectionPoint;
+
+    [Header("External G17 Model")]
+    public bool useExternalModelResource = true;
+    public string externalModelResourcePath = "GunsmithSimulator/Glock17/Imported/Resources/cases/CaseWithGlock17";
+    public string externalModelChildName = "Glock17";
+    public string externalMuzzlePointName = "MuzzleLocator";
+    public string muzzleReferenceName = "MuzzlePoint";
+    public bool preserveExistingMuzzleReference = true;
+    public bool alignExternalModelToMuzzlePoint = true;
+    public bool syncMuzzlePointToExternalModel = false;
+    public bool syncMuzzlePointRotationToExternalModel = false;
+    public bool alignExternalBarrelAxisToGunForward = true;
+    public Vector3 externalModelBarrelAxis = Vector3.left;
+    public bool hideExternalNonGunChildren = true;
+    public bool hideExternalAccessories = true;
+    public bool hideExternalAssemblyHelpers = true;
+    public bool disableExternalModelColliders = true;
+    public Vector3 externalModelLocalPosition = new Vector3(0f, 0.95f, 0f);
+    public Vector3 externalModelLocalEulerAngles = Vector3.zero;
+    public Vector3 externalModelLocalScale = new Vector3(4f, 4f, 4f);
+    public bool overrideExternalSlideTravel = true;
+    public float externalSlideTravel = 0.075f;
+    public float minimumVisibleExternalSlideTravel = 0.075f;
+    public bool animateExternalSlideInGunSpace = true;
+    public bool alignExternalSlideTravelToGunBackward = true;
+    public Vector3 externalSlideTravelDirection = Vector3.back;
+    public Vector3 externalMagazineDropDirection = Vector3.down;
+    public Vector3 externalRecoilDirection = Vector3.back;
+
+    [Header("External Animation")]
+    public bool useExternalModelAnimator = true;
+    public bool externalAnimatorControlsMovingParts = true;
+    public bool externalAnimatorControlsRecoil = true;
+    public string externalFireTriggerName = "Fire";
+    public string externalReloadTriggerName = "Reload";
+    public string externalCockTriggerName = "Cock";
+    public string externalToIdleTriggerName = "ToIdle";
+    public string externalAmmoParameterName = "Ammo";
+    public string externalTestParameterName = "Test";
+    public string externalSteadyParameterName = "Steady";
+    public string externalLowerGunParameterName = "LowerGun";
+    public bool manuallyHoldExternalSlideState = true;
+    public float externalSlideLockHoldDelay = 0.08f;
+    public bool manuallyAnimateExternalMagazineRemoval = true;
+
+    [Header("Material Variants")]
+    public Glock17MaterialVariant materialVariant = Glock17MaterialVariant.Base;
+    public bool applyMaterialVariantOnLoad = true;
+    public string dirtyMaterialResourcePath = "GunsmithSimulator/Glock17/Imported/Resources/guntextures/Glock17_Dirty";
+    public string rustMaterialResourcePath = "GunsmithSimulator/Glock17/Imported/Resources/guntextures/Glock17_Rust";
+    public string portedSlideBarrelMaterialResourcePath = "GunsmithSimulator/Glock17/Imported/Resources/guntextures/Glock17_PortedSlideBarrel";
 
     [Header("Recoil")]
     public bool enableRecoilAnimation = true;
@@ -50,6 +109,12 @@ public class PistolVisualController : MonoBehaviour
     public AudioClip magazineInsertedClip;
     public AudioClip magazineRemovedClip;
     public AudioClip slideLockedClip;
+    public bool useActionAudioResources = true;
+    public string slidePulledClipResourcePath = "GunsmithSimulator/Glock17/Audio/307_Glock_17_Cock";
+    public string slideReleasedClipResourcePath = "GunsmithSimulator/Glock17/Audio/345_Case_Glock_17_Close";
+    public string magazineInsertedClipResourcePath = "GunsmithSimulator/Glock17/Audio/58_Glock_17_Mag_In";
+    public string magazineRemovedClipResourcePath = "GunsmithSimulator/Glock17/Audio/327_Glock_17_Mag_Out";
+    public string slideLockedClipResourcePath = "GunsmithSimulator/Glock17/Audio/697_Glock_17_ShotLast";
 
     private Vector3 slideRestPosition;
     private Vector3 magazineInsertedPosition;
@@ -58,25 +123,114 @@ public class PistolVisualController : MonoBehaviour
     private Transform recoilTransform;
     private Vector3 recoilRestPosition;
     private Quaternion recoilRestRotation;
+    private Vector3 slideTravelDirection = Vector3.back;
+    private Vector3 magazineDropDirection = Vector3.down;
+    private Vector3 recoilKickDirection = Vector3.back;
+    private float activeSlideTravel;
+    private Transform importedMuzzlePoint;
+    private Transform externalGunRoot;
+    private Animator externalGunAnimator;
+    private bool usingExternalModel;
+    private bool manualMagazineOverrideActive;
+    private bool manualSlideOverrideActive;
+    private float manualSlideTargetOffset;
+    private float manualSlideOverrideStartTime;
     private float shotAnimationStartTime = -1f;
     private float recoilAnimationStartTime = -1f;
     private bool initialized;
 
+    public bool IsInitialized => initialized;
+
+    public void UnloadVisual()
+    {
+        Transform oldModel = transform.Find(ImportedModelRootName);
+        if (oldModel != null)
+        {
+            DestroyImmediate(oldModel.gameObject);
+        }
+
+        Transform oldStyled = transform.Find(StyledModelRootName);
+        if (oldStyled != null)
+        {
+            DestroyImmediate(oldStyled.gameObject);
+        }
+
+        HideLegacyBlockoutParts();
+
+        slideTransform = null;
+        magazineTransform = null;
+        triggerTransform = null;
+        ejectionPoint = null;
+        recoilTransform = null;
+        externalGunAnimator = null;
+        usingExternalModel = false;
+
+        initialized = false;
+    }
+
     private const string StyledModelRootName = "G17StylePrototype";
+    private const string ImportedModelRootName = "G17ImportedModel";
+    private const string ImportedInstanceName = "CaseWithGlock17_Instance";
     private const float GripRakeAngle = 13f;
+    private static readonly string[] ExternalAccessoryNameParts =
+    {
+        "compressor",
+        "magwell",
+        "rail_lower",
+        "rail_upper",
+        "barrel_threaded",
+        "threaded_nut"
+    };
+    private static readonly string[] ExternalHelperPrefixes =
+    {
+        "x_",
+        "t_",
+        "a_",
+        "l_",
+        "removeTo_",
+        "p_"
+    };
+    private static readonly string[] ExternalHelperExactNames =
+    {
+        "CVCam Glock",
+        "DefaultRangeLocator",
+        "OnTable_Locator",
+        "cm"
+    };
 
     private void Start()
     {
+        GunShooter shooter = GetComponent<GunShooter>();
+        if (shooter != null && shooter.deferVisualInitialization)
+        {
+            HideLegacyBlockoutParts();
+            return;
+        }
+
         Initialize();
     }
 
     private void Update()
     {
-        Initialize();
+        if (!initialized)
+        {
+            return;
+        }
+
         UpdateRecoilVisual();
         UpdateSlideVisual();
         UpdateMagazineVisual();
         UpdateTriggerVisual();
+    }
+
+    private void LateUpdate()
+    {
+        if (!initialized)
+        {
+            return;
+        }
+
+        UpdateExternalManualOverrides();
     }
 
     public void Initialize()
@@ -91,10 +245,19 @@ public class PistolVisualController : MonoBehaviour
             pistolState = GetComponent<PistolStateMachine>();
         }
 
+        slideTravelDirection = Vector3.back;
+        magazineDropDirection = Vector3.down;
+        recoilKickDirection = Vector3.back;
+        activeSlideTravel = slideTravel;
+        usingExternalModel = false;
+        externalGunAnimator = null;
+
         if (createPrototypeVisuals)
         {
             EnsurePrototypeVisuals();
         }
+
+        LoadActionAudioResources();
 
         if (slideTransform != null)
         {
@@ -104,7 +267,7 @@ public class PistolVisualController : MonoBehaviour
         if (magazineTransform != null)
         {
             magazineInsertedPosition = magazineTransform.localPosition;
-            magazineRemovedPosition = magazineInsertedPosition + Vector3.down * magazineDropDistance;
+            magazineRemovedPosition = magazineInsertedPosition + magazineDropDirection * magazineDropDistance;
         }
 
         if (triggerTransform != null)
@@ -126,18 +289,20 @@ public class PistolVisualController : MonoBehaviour
     {
         shotAnimationStartTime = -1f;
         recoilAnimationStartTime = -1f;
+        manualMagazineOverrideActive = false;
+        manualSlideOverrideActive = false;
 
         if (!initialized)
         {
             return;
         }
 
-        if (slideTransform != null)
+        if (slideTransform != null && !ExternalAnimatorControlsMovingParts())
         {
-            slideTransform.localPosition = slideRestPosition + Vector3.back * GetStableSlideOffset();
+            SetSlidePosition(GetStableSlideOffset(), true);
         }
 
-        if (magazineTransform != null)
+        if (magazineTransform != null && !ExternalAnimatorControlsMovingParts())
         {
             bool magazineInserted = pistolState == null || pistolState.MagazineInserted;
             magazineTransform.gameObject.SetActive(magazineInserted);
@@ -146,36 +311,103 @@ public class PistolVisualController : MonoBehaviour
                 : magazineRemovedPosition;
         }
 
-        if (triggerTransform != null)
+        if (triggerTransform != null && !ExternalAnimatorControlsMovingParts())
         {
             triggerTransform.localRotation = GetTargetTriggerRotation();
         }
 
-        if (recoilTransform != null)
+        if (recoilTransform != null && !ExternalAnimatorControlsRecoil())
         {
             recoilTransform.localPosition = recoilRestPosition;
             recoilTransform.localRotation = recoilRestRotation;
         }
+
+        ResetExternalAnimatorState();
+    }
+
+    public void ApplyWeaponDefinition(WeaponDefinition weapon)
+    {
+        if (weapon == null)
+        {
+            return;
+        }
+
+        Transform oldModel = transform.Find(ImportedModelRootName);
+        if (oldModel != null)
+        {
+            DestroyImmediate(oldModel.gameObject);
+        }
+
+        Transform oldStyled = transform.Find(StyledModelRootName);
+        if (oldStyled != null)
+        {
+            DestroyImmediate(oldStyled.gameObject);
+        }
+
+        externalModelResourcePath = weapon.externalModelResourcePath;
+        externalModelChildName = weapon.externalModelChildName;
+        externalMuzzlePointName = weapon.muzzlePointName;
+
+        slidePulledClipResourcePath = weapon.slidePulledClipPath;
+        slideReleasedClipResourcePath = weapon.slideReleasedClipPath;
+        magazineInsertedClipResourcePath = weapon.magazineInsertedClipPath;
+        magazineRemovedClipResourcePath = weapon.magazineRemovedClipPath;
+        slideLockedClipResourcePath = weapon.slideLockedClipPath;
+
+        slideTransform = null;
+        magazineTransform = null;
+        triggerTransform = null;
+        ejectionPoint = null;
+        recoilTransform = null;
+        externalGunAnimator = null;
+        usingExternalModel = false;
+
+        initialized = false;
+        Initialize();
     }
 
     public void NotifyShotFired()
     {
         Initialize();
-        shotAnimationStartTime = Time.time;
-        recoilAnimationStartTime = Time.time;
+        PlayExternalFireAnimation(false);
+
+        if (!ExternalAnimatorControlsMovingParts())
+        {
+            shotAnimationStartTime = Time.time;
+        }
+
+        if (!ExternalAnimatorControlsRecoil())
+        {
+            recoilAnimationStartTime = Time.time;
+        }
+
         EjectCasing();
 
         if (pistolState != null && pistolState.SlideLocked)
         {
+            StartManualSlideOverride(activeSlideTravel, externalSlideLockHoldDelay);
             PlayActionClip(slideLockedClip);
         }
+    }
+
+    public void NotifyDryFire()
+    {
+        Initialize();
+        PlayExternalFireAnimation(true);
     }
 
     public void NotifyMagazineInserted()
     {
         Initialize();
-
+        manualMagazineOverrideActive = false;
         if (magazineTransform != null)
+        {
+            magazineTransform.gameObject.SetActive(true);
+        }
+
+        PlayExternalReloadAnimation();
+
+        if (magazineTransform != null && !ExternalAnimatorControlsMovingParts())
         {
             magazineTransform.gameObject.SetActive(true);
             magazineTransform.localPosition = magazineRemovedPosition;
@@ -187,12 +419,16 @@ public class PistolVisualController : MonoBehaviour
     public void NotifyMagazineRemoved()
     {
         Initialize();
+        StartManualMagazineRemoval();
+        SetExternalAnimatorAmmo(GetAnimatorAmmoForCurrentState());
         PlayActionClip(magazineRemovedClip);
     }
 
     public void NotifySlidePulled(bool roundEjected)
     {
         Initialize();
+        PlayExternalCockAnimation();
+        StartManualSlideOverride(GetStableSlideOffset(), 0f);
 
         if (roundEjected)
         {
@@ -205,18 +441,22 @@ public class PistolVisualController : MonoBehaviour
     public void NotifySlideReleased()
     {
         Initialize();
+        PlayExternalToIdleAnimation();
+        StartManualSlideOverride(0f, 0f);
         PlayActionClip(slideReleasedClip);
     }
 
     public void NotifySlideLockReleased()
     {
         Initialize();
+        PlayExternalToIdleAnimation();
+        StartManualSlideOverride(0f, 0f);
         PlayActionClip(slideReleasedClip);
     }
 
     private void UpdateRecoilVisual()
     {
-        if (!enableRecoilAnimation || recoilTransform == null)
+        if (!enableRecoilAnimation || recoilTransform == null || ExternalAnimatorControlsRecoil())
         {
             return;
         }
@@ -238,7 +478,7 @@ public class PistolVisualController : MonoBehaviour
         }
 
         Vector3 targetPosition = recoilRestPosition
-            + Vector3.back * (recoilKickBackDistance * recoilAmount);
+            + recoilKickDirection * (recoilKickBackDistance * recoilAmount);
         Quaternion targetRotation = recoilRestRotation
             * Quaternion.Euler(-recoilMuzzleRiseAngle * recoilAmount, 0f, 0f);
 
@@ -257,7 +497,7 @@ public class PistolVisualController : MonoBehaviour
 
     private void UpdateSlideVisual()
     {
-        if (slideTransform == null)
+        if (slideTransform == null || ExternalAnimatorControlsMovingParts())
         {
             return;
         }
@@ -274,21 +514,142 @@ public class PistolVisualController : MonoBehaviour
             }
             else
             {
-                backOffset = Mathf.Sin(Mathf.Clamp01(progress) * Mathf.PI) * slideTravel;
+                backOffset = Mathf.Sin(Mathf.Clamp01(progress) * Mathf.PI) * activeSlideTravel;
             }
         }
 
-        Vector3 targetPosition = slideRestPosition + Vector3.back * backOffset;
-        slideTransform.localPosition = DampVector3(
-            slideTransform.localPosition,
+        SetSlidePosition(backOffset, false);
+    }
+
+    private void SetSlidePosition(float backOffset, bool immediate)
+    {
+        if (slideTransform == null)
+        {
+            return;
+        }
+
+        if (UseGunSpaceSlideAnimation())
+        {
+            Transform slideParent = slideTransform.parent;
+            Vector3 restWorldPosition = slideParent.TransformPoint(slideRestPosition);
+            Vector3 targetWorldPosition = restWorldPosition
+                + transform.TransformDirection(slideTravelDirection) * backOffset;
+
+            slideTransform.position = immediate
+                ? targetWorldPosition
+                : DampVector3(slideTransform.position, targetWorldPosition, slideMoveSpeed);
+            return;
+        }
+
+        Vector3 targetLocalPosition = slideRestPosition + slideTravelDirection * backOffset;
+        slideTransform.localPosition = immediate
+            ? targetLocalPosition
+            : DampVector3(slideTransform.localPosition, targetLocalPosition, slideMoveSpeed);
+    }
+
+    private bool UseGunSpaceSlideAnimation()
+    {
+        return usingExternalModel
+            && animateExternalSlideInGunSpace
+            && slideTransform != null
+            && slideTransform.parent != null;
+    }
+
+    private void UpdateExternalManualOverrides()
+    {
+        if (!initialized || !ExternalAnimatorControlsMovingParts())
+        {
+            return;
+        }
+
+        UpdateManualMagazineOverride();
+        UpdateManualSlideOverride();
+    }
+
+    private void UpdateManualMagazineOverride()
+    {
+        if (!manualMagazineOverrideActive || magazineTransform == null)
+        {
+            return;
+        }
+
+        bool magazineInserted = pistolState == null || pistolState.MagazineInserted;
+        Vector3 targetPosition = magazineInserted
+            ? magazineInsertedPosition
+            : magazineRemovedPosition;
+
+        if (!magazineTransform.gameObject.activeSelf)
+        {
+            magazineTransform.gameObject.SetActive(true);
+        }
+
+        magazineTransform.localPosition = DampVector3(
+            magazineTransform.localPosition,
             targetPosition,
-            slideMoveSpeed
+            magazineMoveSpeed
         );
+
+        if (magazineInserted)
+        {
+            manualMagazineOverrideActive = false;
+            return;
+        }
+
+        if (Vector3.Distance(magazineTransform.localPosition, magazineRemovedPosition) < 0.01f)
+        {
+            magazineTransform.gameObject.SetActive(false);
+        }
+    }
+
+    private void UpdateManualSlideOverride()
+    {
+        if (!manualSlideOverrideActive || slideTransform == null)
+        {
+            return;
+        }
+
+        if (Time.time < manualSlideOverrideStartTime)
+        {
+            return;
+        }
+
+        SetSlidePosition(manualSlideTargetOffset, false);
+        if (manualSlideTargetOffset <= 0f
+            && Vector3.Distance(slideTransform.localPosition, slideRestPosition) < 0.01f)
+        {
+            manualSlideOverrideActive = false;
+        }
+    }
+
+    private void StartManualMagazineRemoval()
+    {
+        if (!ExternalAnimatorControlsMovingParts() || !manuallyAnimateExternalMagazineRemoval)
+        {
+            return;
+        }
+
+        manualMagazineOverrideActive = true;
+        if (magazineTransform != null)
+        {
+            magazineTransform.gameObject.SetActive(true);
+        }
+    }
+
+    private void StartManualSlideOverride(float targetOffset, float delay)
+    {
+        if (!ExternalAnimatorControlsMovingParts() || !manuallyHoldExternalSlideState)
+        {
+            return;
+        }
+
+        manualSlideOverrideActive = true;
+        manualSlideTargetOffset = Mathf.Max(0f, targetOffset);
+        manualSlideOverrideStartTime = Time.time + Mathf.Max(0f, delay);
     }
 
     private void UpdateMagazineVisual()
     {
-        if (magazineTransform == null)
+        if (magazineTransform == null || ExternalAnimatorControlsMovingParts())
         {
             return;
         }
@@ -319,7 +680,7 @@ public class PistolVisualController : MonoBehaviour
 
     private void UpdateTriggerVisual()
     {
-        if (triggerTransform == null)
+        if (triggerTransform == null || ExternalAnimatorControlsMovingParts())
         {
             return;
         }
@@ -339,7 +700,7 @@ public class PistolVisualController : MonoBehaviour
         }
 
         return pistolState.SlidePulled || pistolState.SlideLocked
-            ? slideTravel
+            ? activeSlideTravel
             : 0f;
     }
 
@@ -353,6 +714,11 @@ public class PistolVisualController : MonoBehaviour
 
     private void EnsurePrototypeVisuals()
     {
+        if (TryEnsureExternalModel())
+        {
+            return;
+        }
+
         if (createStyledPrototypeModel)
         {
             HideLegacyBlockoutParts();
@@ -404,6 +770,665 @@ public class PistolVisualController : MonoBehaviour
                 point.transform.localPosition = new Vector3(0.15f, 1.08f, 0.02f);
                 ejectionPoint = point.transform;
             }
+        }
+    }
+
+    private bool TryEnsureExternalModel()
+    {
+        if (!useExternalModelResource || string.IsNullOrEmpty(externalModelResourcePath))
+        {
+            return false;
+        }
+
+        GameObject prefab = Resources.Load<GameObject>(externalModelResourcePath);
+        Transform modelRoot = transform.Find(ImportedModelRootName);
+        if (prefab == null)
+        {
+            if (modelRoot != null)
+            {
+                modelRoot.gameObject.SetActive(false);
+            }
+
+            return false;
+        }
+
+        HideLegacyBlockoutParts();
+        Transform styledModel = transform.Find(StyledModelRootName);
+        if (styledModel != null)
+        {
+            styledModel.gameObject.SetActive(false);
+        }
+
+        Quaternion modelLocalRotation = GetExternalModelLocalRotation();
+        modelRoot = EnsureEmptyChild(
+            transform,
+            ImportedModelRootName,
+            externalModelLocalPosition,
+            modelLocalRotation
+        );
+        modelRoot.localScale = externalModelLocalScale;
+        recoilTransform = modelRoot;
+        usingExternalModel = true;
+        slideTravelDirection = alignExternalSlideTravelToGunBackward && alignExternalBarrelAxisToGunForward
+            ? Vector3.back
+            : NormalizeDirection(externalSlideTravelDirection, Vector3.back);
+        magazineDropDirection = NormalizeDirection(externalMagazineDropDirection, Vector3.down);
+        recoilKickDirection = NormalizeDirection(externalRecoilDirection, Vector3.back);
+        if (overrideExternalSlideTravel)
+        {
+            activeSlideTravel = Mathf.Max(0f, externalSlideTravel);
+            if (animateExternalSlideInGunSpace)
+            {
+                activeSlideTravel = Mathf.Max(activeSlideTravel, Mathf.Max(0f, minimumVisibleExternalSlideTravel));
+            }
+        }
+
+        Transform instanceRoot = modelRoot.Find(ImportedInstanceName);
+        if (instanceRoot == null)
+        {
+            GameObject instance = Instantiate(prefab, modelRoot);
+            instance.name = ImportedInstanceName;
+            instanceRoot = instance.transform;
+        }
+
+        instanceRoot.localPosition = Vector3.zero;
+        instanceRoot.localRotation = Quaternion.identity;
+        instanceRoot.localScale = Vector3.one;
+        instanceRoot.gameObject.SetActive(true);
+
+        Transform gunRoot = FindChildByExactName(instanceRoot, externalModelChildName);
+        if (gunRoot == null)
+        {
+            gunRoot = instanceRoot;
+        }
+
+        if (hideExternalNonGunChildren && gunRoot != instanceRoot)
+        {
+            HideSiblings(instanceRoot, gunRoot);
+        }
+
+        DisableImportedRuntimeComponents(instanceRoot);
+        if (disableExternalModelColliders)
+        {
+            DisableColliders(instanceRoot);
+        }
+
+        ApplyExternalModelVisibility(gunRoot);
+
+        slideTransform = FindChildByExactName(gunRoot, "m_slide");
+        magazineTransform = FindChildByExactName(gunRoot, "m_magazine_body");
+        triggerTransform = FindChildByExactName(gunRoot, "m_trigger");
+        externalGunAnimator = useExternalModelAnimator
+            ? FindExternalGunAnimator(gunRoot)
+            : null;
+        ConfigureExternalGunAnimator();
+
+        importedMuzzlePoint = FindChildByExactName(gunRoot, externalMuzzlePointName);
+        if (preserveExistingMuzzleReference)
+        {
+            AlignImportedModelToExistingMuzzle(modelRoot, true);
+        }
+        else if (syncMuzzlePointToExternalModel)
+        {
+            SyncMuzzleReferenceToImportedModel();
+        }
+        else
+        {
+            AlignImportedModelToExistingMuzzle(modelRoot, false);
+        }
+        EnsureImportedEjectionPoint(gunRoot);
+
+        externalGunRoot = gunRoot;
+        ApplyMaterialVariant(gunRoot);
+
+        return true;
+    }
+
+    private Animator FindExternalGunAnimator(Transform gunRoot)
+    {
+        if (gunRoot == null)
+        {
+            return null;
+        }
+
+        Animator fallback = null;
+        Animator[] animators = gunRoot.GetComponentsInChildren<Animator>(true);
+        foreach (Animator animator in animators)
+        {
+            if (animator == null || animator.runtimeAnimatorController == null)
+            {
+                continue;
+            }
+
+            if (fallback == null)
+            {
+                fallback = animator;
+            }
+
+            if (animator.runtimeAnimatorController.name == "Glock_Gun")
+            {
+                return animator;
+            }
+        }
+
+        return fallback;
+    }
+
+    private void ConfigureExternalGunAnimator()
+    {
+        if (externalGunAnimator == null)
+        {
+            return;
+        }
+
+        externalGunAnimator.enabled = true;
+        externalGunAnimator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
+        externalGunAnimator.updateMode = AnimatorUpdateMode.Normal;
+
+        GunsmithAnimationEventRelay relay =
+            externalGunAnimator.GetComponent<GunsmithAnimationEventRelay>();
+        if (relay == null)
+        {
+            relay = externalGunAnimator.gameObject.AddComponent<GunsmithAnimationEventRelay>();
+        }
+
+        relay.visualController = this;
+        SetExternalAnimatorBool(externalTestParameterName, false);
+        SetExternalAnimatorFloat(externalSteadyParameterName, 0f);
+        SetExternalAnimatorFloat(externalLowerGunParameterName, 0f);
+        SetExternalAnimatorAmmo(GetAnimatorAmmoForCurrentState());
+    }
+
+    private bool ExternalAnimatorControlsMovingParts()
+    {
+        return usingExternalModel
+            && useExternalModelAnimator
+            && externalAnimatorControlsMovingParts
+            && externalGunAnimator != null;
+    }
+
+    private bool ExternalAnimatorControlsRecoil()
+    {
+        return usingExternalModel
+            && useExternalModelAnimator
+            && externalAnimatorControlsRecoil
+            && externalGunAnimator != null;
+    }
+
+    private bool PlayExternalFireAnimation(bool dryFire)
+    {
+        if (externalGunAnimator == null || !useExternalModelAnimator)
+        {
+            return false;
+        }
+
+        SetExternalAnimatorBool(externalTestParameterName, false);
+        SetExternalAnimatorAmmo(dryFire ? 0 : GetAnimatorAmmoForShotAnimation());
+        return SetExternalAnimatorTrigger(externalFireTriggerName);
+    }
+
+    private bool PlayExternalReloadAnimation()
+    {
+        if (externalGunAnimator == null || !useExternalModelAnimator)
+        {
+            return false;
+        }
+
+        manualMagazineOverrideActive = false;
+        SetExternalAnimatorBool(externalTestParameterName, false);
+        SetExternalAnimatorAmmo(GetAnimatorAmmoForReloadAnimation());
+        return SetExternalAnimatorTrigger(externalReloadTriggerName);
+    }
+
+    private bool PlayExternalCockAnimation()
+    {
+        if (externalGunAnimator == null || !useExternalModelAnimator)
+        {
+            return false;
+        }
+
+        SetExternalAnimatorBool(externalTestParameterName, true);
+        SetExternalAnimatorAmmo(GetAnimatorAmmoForCurrentState());
+        return SetExternalAnimatorTrigger(externalCockTriggerName);
+    }
+
+    private bool PlayExternalToIdleAnimation()
+    {
+        if (externalGunAnimator == null || !useExternalModelAnimator)
+        {
+            return false;
+        }
+
+        SetExternalAnimatorBool(externalTestParameterName, false);
+        SetExternalAnimatorAmmo(GetAnimatorAmmoForCurrentState());
+        return SetExternalAnimatorTrigger(externalToIdleTriggerName);
+    }
+
+    private void ResetExternalAnimatorState()
+    {
+        if (externalGunAnimator == null || !useExternalModelAnimator)
+        {
+            return;
+        }
+
+        SetExternalAnimatorBool(externalTestParameterName, false);
+        SetExternalAnimatorAmmo(GetAnimatorAmmoForCurrentState());
+    }
+
+    private int GetAnimatorAmmoForShotAnimation()
+    {
+        if (pistolState == null)
+        {
+            return 2;
+        }
+
+        if (pistolState.SlideLocked || !pistolState.RoundInChamber)
+        {
+            return 1;
+        }
+
+        return Mathf.Max(2, GetAnimatorAmmoForCurrentState());
+    }
+
+    private int GetAnimatorAmmoForReloadAnimation()
+    {
+        if (pistolState == null)
+        {
+            return 0;
+        }
+
+        return pistolState.SlideLocked ? 0 : Mathf.Max(1, GetAnimatorAmmoForCurrentState());
+    }
+
+    private int GetAnimatorAmmoForCurrentState()
+    {
+        if (pistolState == null || pistolState.magazine == null || !pistolState.MagazineInserted)
+        {
+            return pistolState != null && pistolState.RoundInChamber ? 1 : 0;
+        }
+
+        int chamberRound = pistolState.RoundInChamber ? 1 : 0;
+        return Mathf.Max(0, pistolState.magazine.AmmoCount + chamberRound);
+    }
+
+    private void SetExternalAnimatorAmmo(int ammo)
+    {
+        SetExternalAnimatorInteger(externalAmmoParameterName, Mathf.Max(0, ammo));
+    }
+
+    private bool SetExternalAnimatorTrigger(string parameterName)
+    {
+        if (!HasExternalAnimatorParameter(parameterName, AnimatorControllerParameterType.Trigger))
+        {
+            return false;
+        }
+
+        externalGunAnimator.ResetTrigger(parameterName);
+        externalGunAnimator.SetTrigger(parameterName);
+        return true;
+    }
+
+    private void SetExternalAnimatorInteger(string parameterName, int value)
+    {
+        if (HasExternalAnimatorParameter(parameterName, AnimatorControllerParameterType.Int))
+        {
+            externalGunAnimator.SetInteger(parameterName, value);
+        }
+    }
+
+    private void SetExternalAnimatorFloat(string parameterName, float value)
+    {
+        if (HasExternalAnimatorParameter(parameterName, AnimatorControllerParameterType.Float))
+        {
+            externalGunAnimator.SetFloat(parameterName, value);
+        }
+    }
+
+    private void SetExternalAnimatorBool(string parameterName, bool value)
+    {
+        if (HasExternalAnimatorParameter(parameterName, AnimatorControllerParameterType.Bool))
+        {
+            externalGunAnimator.SetBool(parameterName, value);
+        }
+    }
+
+    private bool HasExternalAnimatorParameter(string parameterName, AnimatorControllerParameterType type)
+    {
+        if (externalGunAnimator == null || string.IsNullOrEmpty(parameterName))
+        {
+            return false;
+        }
+
+        AnimatorControllerParameter[] parameters = externalGunAnimator.parameters;
+        foreach (AnimatorControllerParameter parameter in parameters)
+        {
+            if (parameter.name == parameterName && parameter.type == type)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private Quaternion GetExternalModelLocalRotation()
+    {
+        Quaternion configuredRotation = Quaternion.Euler(externalModelLocalEulerAngles);
+        if (!alignExternalBarrelAxisToGunForward)
+        {
+            return configuredRotation;
+        }
+
+        Vector3 modelBarrelAxis = NormalizeDirection(externalModelBarrelAxis, Vector3.left);
+        return Quaternion.FromToRotation(modelBarrelAxis, Vector3.forward) * configuredRotation;
+    }
+
+    private void ApplyExternalModelVisibility(Transform root)
+    {
+        if (root == null)
+        {
+            return;
+        }
+
+        Transform[] children = root.GetComponentsInChildren<Transform>(true);
+        foreach (Transform child in children)
+        {
+            if (child == root)
+            {
+                continue;
+            }
+
+            if (hideExternalAssemblyHelpers && IsExternalAssemblyHelper(child.name))
+            {
+                child.gameObject.SetActive(false);
+                continue;
+            }
+
+            if (hideExternalAccessories && IsExternalAccessory(child.name))
+            {
+                child.gameObject.SetActive(false);
+            }
+        }
+    }
+
+    private static bool IsExternalAccessory(string objectName)
+    {
+        string normalizedName = objectName.ToLowerInvariant();
+        foreach (string namePart in ExternalAccessoryNameParts)
+        {
+            if (normalizedName.Contains(namePart))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsExternalAssemblyHelper(string objectName)
+    {
+        foreach (string exactName in ExternalHelperExactNames)
+        {
+            if (objectName == exactName)
+            {
+                return true;
+            }
+        }
+
+        foreach (string prefix in ExternalHelperPrefixes)
+        {
+            if (objectName.StartsWith(prefix))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void ApplyMaterialVariant(Transform gunRoot)
+    {
+        if (!applyMaterialVariantOnLoad || gunRoot == null)
+        {
+            return;
+        }
+
+        Material variantMaterial = LoadMaterialVariant();
+        if (variantMaterial == null)
+        {
+            return;
+        }
+
+        Renderer[] renderers = gunRoot.GetComponentsInChildren<Renderer>(true);
+        foreach (Renderer renderer in renderers)
+        {
+            if (!renderer.gameObject.activeSelf)
+            {
+                continue;
+            }
+
+            Material[] materials = renderer.sharedMaterials;
+            bool changed = false;
+
+            for (int i = 0; i < materials.Length; i++)
+            {
+                if (materials[i] != null && materials[i].name == "Glock17_Base")
+                {
+                    materials[i] = variantMaterial;
+                    changed = true;
+                }
+            }
+
+            if (changed)
+            {
+                renderer.sharedMaterials = materials;
+            }
+        }
+    }
+
+    private Material LoadMaterialVariant()
+    {
+        string path = null;
+        switch (materialVariant)
+        {
+            case Glock17MaterialVariant.Dirty:
+                path = dirtyMaterialResourcePath;
+                break;
+            case Glock17MaterialVariant.Rust:
+                path = rustMaterialResourcePath;
+                break;
+            case Glock17MaterialVariant.PortedSlideBarrel:
+                path = portedSlideBarrelMaterialResourcePath;
+                break;
+            default:
+                return null;
+        }
+
+        if (string.IsNullOrEmpty(path))
+        {
+            return null;
+        }
+
+        Material material = Resources.Load<Material>(path);
+        if (material == null)
+        {
+            Debug.LogWarning("Material variant not found: " + path);
+        }
+
+        return material;
+    }
+
+    public void SwitchMaterialVariant(Glock17MaterialVariant newVariant)
+    {
+        materialVariant = newVariant;
+
+        if (externalGunRoot != null)
+        {
+            ApplyMaterialVariant(externalGunRoot);
+        }
+    }
+
+    private void AlignImportedModelToExistingMuzzle(Transform modelRoot, bool forceAlign)
+    {
+        if ((!forceAlign && !alignExternalModelToMuzzlePoint) || importedMuzzlePoint == null)
+        {
+            return;
+        }
+
+        Transform muzzleReference = transform.Find(muzzleReferenceName);
+        if (muzzleReference == null)
+        {
+            return;
+        }
+
+        if (!syncMuzzlePointRotationToExternalModel)
+        {
+            muzzleReference.localRotation = Quaternion.identity;
+        }
+
+        modelRoot.position += muzzleReference.position - importedMuzzlePoint.position;
+    }
+
+    private void SyncMuzzleReferenceToImportedModel()
+    {
+        if (importedMuzzlePoint == null)
+        {
+            return;
+        }
+
+        Transform muzzleReference = transform.Find(muzzleReferenceName);
+        if (muzzleReference == null)
+        {
+            return;
+        }
+
+        muzzleReference.position = importedMuzzlePoint.position;
+        if (syncMuzzlePointRotationToExternalModel)
+        {
+            muzzleReference.rotation = importedMuzzlePoint.rotation;
+        }
+        else
+        {
+            muzzleReference.localRotation = Quaternion.identity;
+        }
+    }
+
+    private void EnsureImportedEjectionPoint(Transform gunRoot)
+    {
+        if (ejectionPoint != null)
+        {
+            return;
+        }
+
+        Transform slideRoot = slideTransform != null ? slideTransform : gunRoot;
+        Transform existing = slideRoot.Find("G17_Imported_EjectionPoint");
+        if (existing != null)
+        {
+            ejectionPoint = existing;
+            return;
+        }
+
+        GameObject point = new GameObject("G17_Imported_EjectionPoint");
+        point.transform.SetParent(slideRoot, false);
+
+        Transform extractor = FindChildByExactName(gunRoot, "m_extractor");
+        if (extractor != null)
+        {
+            point.transform.position = extractor.position;
+            point.transform.rotation = extractor.rotation;
+        }
+        else if (importedMuzzlePoint != null)
+        {
+            point.transform.position = importedMuzzlePoint.position
+                - transform.forward * 0.18f
+                + transform.right * 0.07f
+                + transform.up * 0.02f;
+            point.transform.rotation = importedMuzzlePoint.rotation;
+        }
+        else
+        {
+            point.transform.localPosition = new Vector3(0.12f, 0.04f, -0.08f);
+            point.transform.localRotation = Quaternion.identity;
+        }
+
+        ejectionPoint = point.transform;
+    }
+
+    private void HideSiblings(Transform parent, Transform keepVisible)
+    {
+        foreach (Transform child in parent)
+        {
+            child.gameObject.SetActive(child == keepVisible);
+        }
+    }
+
+    private static Transform FindChildByExactName(Transform root, string childName)
+    {
+        if (root == null || string.IsNullOrEmpty(childName))
+        {
+            return null;
+        }
+
+        if (root.name == childName)
+        {
+            return root;
+        }
+
+        foreach (Transform child in root)
+        {
+            Transform result = FindChildByExactName(child, childName);
+            if (result != null)
+            {
+                return result;
+            }
+        }
+
+        return null;
+    }
+
+    private static void DisableColliders(Transform root)
+    {
+        Collider[] colliders = root.GetComponentsInChildren<Collider>(true);
+        foreach (Collider collider in colliders)
+        {
+            collider.enabled = false;
+        }
+    }
+
+    private static void DisableImportedRuntimeComponents(Transform root)
+    {
+        Camera[] cameras = root.GetComponentsInChildren<Camera>(true);
+        foreach (Camera camera in cameras)
+        {
+            camera.enabled = false;
+        }
+
+        AudioListener[] listeners = root.GetComponentsInChildren<AudioListener>(true);
+        foreach (AudioListener listener in listeners)
+        {
+            listener.enabled = false;
+        }
+
+        Light[] lights = root.GetComponentsInChildren<Light>(true);
+        foreach (Light light in lights)
+        {
+            light.enabled = false;
+        }
+
+        MonoBehaviour[] behaviours = root.GetComponentsInChildren<MonoBehaviour>(true);
+        foreach (MonoBehaviour behaviour in behaviours)
+        {
+            if (behaviour == null)
+            {
+                continue;
+            }
+
+            if (behaviour is GunsmithAnimationEventRelay)
+            {
+                continue;
+            }
+
+            behaviour.enabled = false;
         }
     }
 
@@ -1089,6 +2114,50 @@ public class PistolVisualController : MonoBehaviour
         actionAudioSource.PlayOneShot(clip, 1f);
     }
 
+    public void NotifyExternalAnimationFireEvent()
+    {
+    }
+
+    public void NotifyExternalAnimationReloadedEvent()
+    {
+        SetExternalAnimatorAmmo(GetAnimatorAmmoForCurrentState());
+    }
+
+    public void PlayExternalAnimationSound(string eventPath)
+    {
+    }
+
+    private void LoadActionAudioResources()
+    {
+        if (!useActionAudioResources)
+        {
+            return;
+        }
+
+        slidePulledClip = LoadAudioResource(slidePulledClipResourcePath, slidePulledClip);
+        slideReleasedClip = LoadAudioResource(slideReleasedClipResourcePath, slideReleasedClip);
+        magazineInsertedClip = LoadAudioResource(magazineInsertedClipResourcePath, magazineInsertedClip);
+        magazineRemovedClip = LoadAudioResource(magazineRemovedClipResourcePath, magazineRemovedClip);
+        slideLockedClip = LoadAudioResource(slideLockedClipResourcePath, slideLockedClip);
+    }
+
+    private static AudioClip LoadAudioResource(string resourcePath, AudioClip fallback)
+    {
+        if (string.IsNullOrEmpty(resourcePath))
+        {
+            return fallback;
+        }
+
+        AudioClip clip = Resources.Load<AudioClip>(resourcePath);
+        if (clip == null)
+        {
+            return fallback;
+        }
+
+        clip.LoadAudioData();
+        return clip;
+    }
+
     private static void ApplyPrototypeColor(GameObject gameObject, Color color)
     {
         Renderer renderer = gameObject.GetComponent<Renderer>();
@@ -1118,5 +2187,12 @@ public class PistolVisualController : MonoBehaviour
     private static float GetDampFactor(float speed)
     {
         return 1f - Mathf.Exp(-Mathf.Max(0f, speed) * Time.deltaTime);
+    }
+
+    private static Vector3 NormalizeDirection(Vector3 direction, Vector3 fallback)
+    {
+        return direction.sqrMagnitude > 0.0001f
+            ? direction.normalized
+            : fallback.normalized;
     }
 }

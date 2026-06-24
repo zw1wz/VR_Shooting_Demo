@@ -94,6 +94,12 @@ public class PistolStateMachine : MonoBehaviour
         LastTriggerResult = PistolTriggerResult.None;
     }
 
+    public void ApplyConfig(PistolConfig newConfig)
+    {
+        config = newConfig != null ? newConfig : new PistolConfig();
+        ResetToConfiguredState();
+    }
+
     public bool InsertFullMagazine()
     {
         if (magazineInserted)

@@ -2,8 +2,10 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
+using UnityEngine.UI;
 using TMPro;
 
+[ExecuteAlways]
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance;
@@ -70,12 +72,16 @@ public class GameManager : MonoBehaviour
     public TMP_Text weaponStatusText;
     public TMP_Text weaponFeedbackText;
 
+    [Header("Weapon Selection")]
+    public WeaponDefinition[] availableWeapons;
+
     private enum GameState
     {
-        Idle,
+        ModeSelection,
+        WeaponSelection,
         WaitingBeep,
         Shooting,
-        Result
+        Result,
     }
 
     private struct ShotRecord
@@ -97,11 +103,16 @@ public class GameManager : MonoBehaviour
     private readonly List<Target> activeTargets = new List<Target>();
     private readonly List<ShotRecord> shotRecords = new List<ShotRecord>();
 
-    private GameState state = GameState.Idle;
+    private GameState state = GameState.ModeSelection;
     private AudioClip generatedBeepClip;
     private Coroutine roundCoroutine;
     private float startShootTime;
     private int score;
+
+    private GameMode selectedGameMode;
+    private WeaponDefinition selectedWeapon;
+    private GameObject modeSelectionPanel;
+    private GameObject weaponSelectionPanel;
 
     private void Awake()
     {
@@ -112,17 +123,110 @@ public class GameManager : MonoBehaviour
         }
 
         Instance = this;
+
+        if (!Application.isPlaying)
+        {
+            CreateEditorOverlay();
+            return;
+        }
+
+        HideAllPanels();
+        CreateSelectionPanels();
+        SetPanelActive(modeSelectionPanel, true);
     }
 
     private void Start()
     {
+        HideEditorOverlay();
         InitAudio();
         InitWeaponUI();
         HideAllTargets();
+        RebindSceneButtons();
         ApplyUITheme();
-        ShowStartUI();
+        ShowModeSelectionUI();
 
         StartCoroutine(WarmUpBeepAudio());
+    }
+
+    private void HideEditorOverlay()
+    {
+        Canvas canvas = GetComponent<Canvas>();
+        if (canvas == null)
+        {
+            canvas = FindObjectOfType<Canvas>();
+        }
+
+        if (canvas != null)
+        {
+            Transform overlay = canvas.transform.Find("EditorOverlay");
+            if (overlay != null)
+            {
+                Destroy(overlay.gameObject);
+            }
+        }
+    }
+
+    private void CreateEditorOverlay()
+    {
+        Canvas canvas = FindObjectOfType<Canvas>();
+        if (canvas == null) return;
+
+        Transform existing = canvas.transform.Find("EditorOverlay");
+        if (existing != null) return;
+
+        GameObject overlay = new GameObject("EditorOverlay",
+            typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        overlay.transform.SetParent(canvas.transform, false);
+
+        RectTransform rect = overlay.GetComponent<RectTransform>();
+        rect.anchorMin = Vector2.zero;
+        rect.anchorMax = Vector2.one;
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = Vector2.zero;
+        rect.sizeDelta = Vector2.zero;
+
+        Image img = overlay.GetComponent<Image>();
+        img.color = new Color(0.03f, 0.05f, 0.09f, 1f);
+        img.raycastTarget = false;
+
+        GameObject accent = new GameObject("AccentBar",
+            typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        accent.transform.SetParent(overlay.transform, false);
+
+        RectTransform accentRect = accent.GetComponent<RectTransform>();
+        accentRect.anchorMin = new Vector2(0f, 1f);
+        accentRect.anchorMax = new Vector2(1f, 1f);
+        accentRect.pivot = new Vector2(0.5f, 1f);
+        accentRect.anchoredPosition = Vector2.zero;
+        accentRect.sizeDelta = new Vector2(0f, 5f);
+
+        Image accentImg = accent.GetComponent<Image>();
+        accentImg.color = new Color(0.12f, 0.82f, 0.72f, 1f);
+        accentImg.raycastTarget = false;
+
+        GameObject titleObj = new GameObject("EditorTitle",
+            typeof(RectTransform), typeof(CanvasRenderer), typeof(UnityEngine.UI.Text));
+        titleObj.transform.SetParent(overlay.transform, false);
+
+        RectTransform titleRect = titleObj.GetComponent<RectTransform>();
+        titleRect.anchorMin = new Vector2(0.5f, 0.5f);
+        titleRect.anchorMax = new Vector2(0.5f, 0.5f);
+        titleRect.pivot = new Vector2(0.5f, 0.5f);
+        titleRect.anchoredPosition = new Vector2(0f, 0f);
+        titleRect.sizeDelta = new Vector2(800f, 100f);
+
+        UnityEngine.UI.Text titleText = titleObj.GetComponent<UnityEngine.UI.Text>();
+        titleText.text = "虚拟射击训练系统";
+        titleText.font = Resources.Load<Font>("Fonts/NotoSansCJKsc-Regular");
+        if (titleText.font == null)
+        {
+            titleText.font = Font.CreateDynamicFontFromOSFont("Microsoft YaHei", 48);
+        }
+        titleText.fontSize = 48;
+        titleText.fontStyle = UnityEngine.FontStyle.Bold;
+        titleText.alignment = UnityEngine.TextAnchor.MiddleCenter;
+        titleText.color = new Color(0.94f, 0.97f, 1f, 1f);
+        titleText.raycastTarget = false;
     }
 
     private void Update()
@@ -138,11 +242,6 @@ public class GameManager : MonoBehaviour
 
     private void HandleDebugInput()
     {
-        if (Input.GetKeyDown(KeyCode.Space))
-        {
-            StartQuickReactionDemo();
-        }
-
         if (Input.GetKeyDown(testBeepKey))
         {
             PlayBeep();
@@ -151,6 +250,11 @@ public class GameManager : MonoBehaviour
         if (Input.GetKeyDown(testHitSoundKey))
         {
             PlayMetalHit();
+        }
+
+        if (Input.GetKeyDown(KeyCode.Escape) && state == GameState.Shooting)
+        {
+            EndDemo();
         }
     }
 
@@ -178,6 +282,352 @@ public class GameManager : MonoBehaviour
         weaponStatusText = EnsureWeaponHudText(weaponStatusText, "WeaponStatusText");
         weaponFeedbackText = EnsureWeaponHudText(weaponFeedbackText, "WeaponFeedbackText");
         UpdateWeaponUI();
+    }
+
+    private void CreateSelectionPanels()
+    {
+        Canvas canvas = FindObjectOfType<Canvas>();
+        if (canvas == null) return;
+
+        var modeResult = SelectionPanelBuilder.CreateModeSelectionPanel(
+            canvas.transform, GameModes.All);
+        modeSelectionPanel = modeResult.panel;
+        modeResult.onModeSelected = mode => { selectedGameMode = mode; };
+        modeResult.onConfirm = ConfirmModeSelection;
+
+        var weaponList = new List<WeaponDefinition>();
+        if (availableWeapons != null)
+        {
+            weaponList.AddRange(availableWeapons);
+        }
+        if (weaponList.Count == 0)
+        {
+            Debug.LogWarning("No weapons assigned to GameManager.availableWeapons.");
+        }
+
+        var weaponResult = SelectionPanelBuilder.CreateWeaponSelectionPanel(
+            canvas.transform, weaponList);
+        weaponSelectionPanel = weaponResult.panel;
+        weaponResult.onWeaponSelected = weapon => { selectedWeapon = weapon; };
+        weaponResult.onConfirm = ConfirmWeaponSelection;
+        weaponResult.onBack = ShowModeSelectionUI;
+    }
+
+    private void RebindSceneButtons()
+    {
+        if (startPanel != null)
+        {
+            Button startBtn = startPanel.GetComponentInChildren<Button>(true);
+            if (startBtn != null)
+            {
+                startBtn.onClick.RemoveAllListeners();
+                startBtn.onClick.AddListener(ShowModeSelectionUI);
+            }
+        }
+
+        if (resultPanel != null)
+        {
+            Transform resultCard = resultPanel.transform.Find("UI_Card");
+            Transform resultParent = resultCard != null ? resultCard : resultPanel.transform;
+
+            // Configure existing RestartButton → 返回菜单 (right)
+            Button restartBtn = null;
+            Transform restartTransform = resultParent.Find("RestartButton");
+            if (restartTransform == null)
+            {
+                restartTransform = resultPanel.transform.Find("RestartButton");
+            }
+            if (restartTransform != null)
+            {
+                restartTransform.SetParent(resultParent, false);
+                restartBtn = restartTransform.GetComponent<Button>();
+                RectTransform rect = restartTransform.GetComponent<RectTransform>();
+                rect.anchorMin = new Vector2(0.5f, 0.5f);
+                rect.anchorMax = new Vector2(0.5f, 0.5f);
+                rect.pivot = new Vector2(0.5f, 0.5f);
+                rect.anchoredPosition = new Vector2(130f, -365f);
+                rect.sizeDelta = new Vector2(240f, 56f);
+            }
+
+            if (restartBtn != null)
+            {
+                restartBtn.onClick.RemoveAllListeners();
+                restartBtn.onClick.AddListener(ReturnToModeSelection);
+
+                TMP_Text label = restartBtn.GetComponentInChildren<TMP_Text>(true);
+                if (label != null)
+                {
+                    label.text = "返回菜单";
+                    ApplyChineseFontToText(label);
+                }
+            }
+
+            // Create or configure RetryButton → 重新开始 (left)
+            Transform retryTransform = resultParent.Find("RetryButton");
+            if (retryTransform == null)
+            {
+                GameObject retryObj = new GameObject("RetryButton",
+                    typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+                retryObj.transform.SetParent(resultParent, false);
+                retryObj.layer = resultPanel.layer;
+
+                RectTransform retryRect = retryObj.GetComponent<RectTransform>();
+                retryRect.anchorMin = new Vector2(0.5f, 0.5f);
+                retryRect.anchorMax = new Vector2(0.5f, 0.5f);
+                retryRect.pivot = new Vector2(0.5f, 0.5f);
+                retryRect.anchoredPosition = new Vector2(-130f, -365f);
+                retryRect.sizeDelta = new Vector2(240f, 56f);
+
+                Image retryImg = retryObj.GetComponent<Image>();
+                retryImg.color = new Color(0.09f, 0.72f, 0.65f, 1f);
+
+                Button retryButton = retryObj.AddComponent<Button>();
+                ColorBlock colors = retryButton.colors;
+                colors.normalColor = new Color(0.09f, 0.72f, 0.65f, 1f);
+                colors.highlightedColor = new Color(0.14f, 0.86f, 0.78f, 1f);
+                colors.pressedColor = new Color(0.05f, 0.48f, 0.44f, 1f);
+                colors.selectedColor = new Color(0.14f, 0.86f, 0.78f, 1f);
+                colors.colorMultiplier = 1f;
+                colors.fadeDuration = 0.08f;
+                retryButton.colors = colors;
+
+                GameObject retryLabel = new GameObject("Label",
+                    typeof(RectTransform), typeof(CanvasRenderer), typeof(TextMeshProUGUI));
+                retryLabel.transform.SetParent(retryObj.transform, false);
+                retryLabel.layer = resultPanel.layer;
+
+                TMP_Text retryText = retryLabel.GetComponent<TMP_Text>();
+                retryText.text = "重新开始";
+                retryText.fontSize = 24f;
+                retryText.fontStyle = FontStyles.Bold;
+                retryText.alignment = TextAlignmentOptions.Center;
+                retryText.color = new Color(0.02f, 0.04f, 0.045f, 1f);
+                retryText.raycastTarget = false;
+                ApplyChineseFontToText(retryText);
+
+                RectTransform retryLabelRect = retryLabel.GetComponent<RectTransform>();
+                retryLabelRect.anchorMin = Vector2.zero;
+                retryLabelRect.anchorMax = Vector2.one;
+                retryLabelRect.pivot = new Vector2(0.5f, 0.5f);
+                retryLabelRect.anchoredPosition = Vector2.zero;
+                retryLabelRect.sizeDelta = Vector2.zero;
+
+                retryButton.onClick.AddListener(RestartCurrentMode);
+
+                // Copy sprite from RestartButton for visual consistency
+                if (restartBtn != null)
+                {
+                    Image sourceImg = restartBtn.GetComponent<Image>();
+                    Image newRetryImg = retryObj.GetComponent<Image>();
+                    if (sourceImg != null && sourceImg.sprite != null)
+                    {
+                        newRetryImg.sprite = sourceImg.sprite;
+                        newRetryImg.type = sourceImg.type;
+                    }
+                }
+            }
+            else
+            {
+                // Already exists — just fix position and label
+                RectTransform retryRect = retryTransform.GetComponent<RectTransform>();
+                retryRect.SetParent(resultParent, false);
+                retryRect.anchoredPosition = new Vector2(-130f, -365f);
+                retryRect.sizeDelta = new Vector2(240f, 56f);
+
+                Button retryButton = retryTransform.GetComponent<Button>();
+                if (retryButton != null)
+                {
+                    retryButton.onClick.RemoveAllListeners();
+                    retryButton.onClick.AddListener(RestartCurrentMode);
+                }
+
+                TMP_Text retryText = retryTransform.GetComponentInChildren<TMP_Text>(true);
+                if (retryText != null)
+                {
+                    retryText.text = "重新开始";
+                    ApplyChineseFontToText(retryText);
+                }
+
+                if (restartBtn != null)
+                {
+                    Image sourceImg = restartBtn.GetComponent<Image>();
+                    Image existingRetryImg = retryTransform.GetComponent<Image>();
+                    if (sourceImg != null && sourceImg.sprite != null && existingRetryImg != null)
+                    {
+                        existingRetryImg.sprite = sourceImg.sprite;
+                        existingRetryImg.type = sourceImg.type;
+                    }
+                }
+            }
+        }
+    }
+
+    private void ShowModeSelectionUI()
+    {
+        if (roundCoroutine != null)
+        {
+            StopCoroutine(roundCoroutine);
+            roundCoroutine = null;
+        }
+
+        HideAllTargets();
+        state = GameState.ModeSelection;
+        HideAllPanels();
+        ResetSelectionPanel(modeSelectionPanel);
+        SetPanelActive(modeSelectionPanel, true);
+    }
+
+    private void ShowWeaponSelectionUI()
+    {
+        state = GameState.WeaponSelection;
+        HideAllPanels();
+        ResetSelectionPanel(weaponSelectionPanel);
+        SetPanelActive(weaponSelectionPanel, true);
+    }
+
+    private static void ResetSelectionPanel(GameObject panel)
+    {
+        if (panel == null) return;
+
+        Button[] buttons = panel.GetComponentsInChildren<Button>(true);
+        foreach (Button btn in buttons)
+        {
+            if (btn.gameObject.name.StartsWith("Btn_"))
+            {
+                btn.interactable = false;
+            }
+            else if (btn.gameObject.name.StartsWith("Item_"))
+            {
+                Image img = btn.GetComponent<Image>();
+                if (img != null)
+                {
+                    img.color = new Color(0.1f, 0.12f, 0.15f, 0.9f);
+                }
+            }
+        }
+    }
+
+    private void ConfirmModeSelection()
+    {
+        if (selectedGameMode == null)
+        {
+            return;
+        }
+        ShowWeaponSelectionUI();
+    }
+
+    private void ConfirmWeaponSelection()
+    {
+        if (selectedWeapon == null)
+        {
+            return;
+        }
+
+        ApplySelectedWeapon();
+        StartGameWithMode();
+    }
+
+    private void ApplySelectedWeapon()
+    {
+        if (selectedWeapon != null && gunShooter != null)
+        {
+            gunShooter.LoadWeapon(selectedWeapon);
+        }
+    }
+
+    private void StartGameWithMode()
+    {
+        if (selectedGameMode == null)
+        {
+            return;
+        }
+
+        bulletCount = selectedGameMode.bulletCount;
+        targetCount = selectedGameMode.targetCount;
+
+        if (selectedGameMode.useBeepCountdown)
+        {
+            StartQuickReactionDemo();
+        }
+        else
+        {
+            StartFreeShoot();
+        }
+    }
+
+    private void StartFreeShoot()
+    {
+        if (roundCoroutine != null)
+        {
+            StopCoroutine(roundCoroutine);
+            roundCoroutine = null;
+        }
+
+        ResetRound();
+        HideAllTargets();
+        ShowRandomTargets();
+
+        state = GameState.Shooting;
+        startShootTime = Time.time;
+
+        if (gunShooter != null)
+        {
+            gunShooter.BeginTrainingMetrics();
+        }
+
+        ShowShootingUI();
+    }
+
+    private void ReturnToModeSelection()
+    {
+        if (roundCoroutine != null)
+        {
+            StopCoroutine(roundCoroutine);
+            roundCoroutine = null;
+        }
+
+        ResetRound();
+        HideAllTargets();
+
+        if (gunShooter != null)
+        {
+            gunShooter.UnloadWeapon();
+        }
+
+        ShowModeSelectionUI();
+    }
+
+    private void RestartCurrentMode()
+    {
+        if (selectedGameMode == null || selectedWeapon == null)
+        {
+            ReturnToModeSelection();
+            return;
+        }
+
+        ApplySelectedWeapon();
+        StartGameWithMode();
+    }
+
+    private static TMP_FontAsset _chineseFont;
+
+    private static void ApplyChineseFontToText(TMP_Text text)
+    {
+        if (text == null) return;
+
+        if (_chineseFont == null)
+        {
+            Font bundledFont = Resources.Load<Font>("Fonts/NotoSansCJKsc-Regular");
+            if (bundledFont != null)
+            {
+                _chineseFont = TMP_FontAsset.CreateFontAsset(bundledFont);
+            }
+        }
+
+        if (_chineseFont != null)
+        {
+            text.font = _chineseFont;
+        }
     }
 
     private TMP_Text EnsureWeaponHudText(TMP_Text currentText, string objectName)
@@ -260,6 +710,11 @@ public class GameManager : MonoBehaviour
     public bool CanShoot()
     {
         return state == GameState.Shooting;
+    }
+
+    public bool CanControlWeapon()
+    {
+        return state == GameState.WaitingBeep || state == GameState.Shooting;
     }
 
     public void StartQuickReactionDemo()
@@ -544,7 +999,7 @@ public class GameManager : MonoBehaviour
             hitName
         ));
 
-        if (shotRecords.Count >= bulletCount)
+        if (bulletCount > 0 && shotRecords.Count >= bulletCount)
         {
             EndDemo();
         }
@@ -682,6 +1137,8 @@ public class GameManager : MonoBehaviour
         SetPanelActive(waitingPanel, false);
         SetPanelActive(shootingPanel, false);
         SetPanelActive(resultPanel, false);
+        SetPanelActive(modeSelectionPanel, false);
+        SetPanelActive(weaponSelectionPanel, false);
     }
 
     private void ApplyUITheme()
@@ -745,7 +1202,10 @@ public class GameManager : MonoBehaviour
 
         if (bulletText != null)
         {
-            bulletText.text = "已射击: " + shotRecords.Count + "/" + bulletCount;
+            string bulletDisplay = bulletCount > 0
+                ? shotRecords.Count + "/" + bulletCount
+                : shotRecords.Count.ToString();
+            bulletText.text = "已射击: " + bulletDisplay;
         }
 
         if (scoreText != null)
@@ -804,7 +1264,7 @@ public class GameManager : MonoBehaviour
 
         StringBuilder builder = new StringBuilder();
         builder.AppendLine("最终得分    " + score);
-        builder.AppendLine("命中次数    " + GetHitCount() + "/" + bulletCount);
+        builder.AppendLine("命中次数    " + GetHitCount() + (bulletCount > 0 ? "/" + bulletCount : ""));
         builder.AppendLine("命中率      " + GetHitRate().ToString("F1") + "%");
         AppendWeaponTrainingMetrics(builder);
         builder.AppendLine();

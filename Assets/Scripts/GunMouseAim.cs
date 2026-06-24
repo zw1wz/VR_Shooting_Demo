@@ -15,23 +15,28 @@ public class GunMouseAim : MonoBehaviour
 
     private void Start()
     {
-        SetCursorLocked(true);
+        SetCursorLocked(false);
     }
 
     private void Update()
     {
-        if (Input.GetKeyDown(KeyCode.Escape))
+        bool canControl = GameManager.Instance != null && GameManager.Instance.CanControlWeapon();
+
+        if (!canControl)
         {
             SetCursorLocked(false);
-        }
-
-        if (Input.GetMouseButtonDown(0))
-        {
-            SetCursorLocked(true);
+            return;
         }
 
         if (Cursor.lockState != CursorLockMode.Locked)
         {
+            SetCursorLocked(true);
+            return;
+        }
+
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            SetCursorLocked(false);
             return;
         }
 

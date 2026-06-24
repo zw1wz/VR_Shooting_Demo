@@ -27,9 +27,15 @@ public class GunShooter : MonoBehaviour
     public AudioSource gunAudioSource;
     public AudioClip gunShotClip;
     public AudioClip dryFireClip;
+    public bool useGunAudioResources = true;
+    public string gunShotClipResourcePath = "GunsmithSimulator/Glock17/Audio/17_Glock_17_Shot_OUT-001";
+    public string dryFireClipResourcePath = "GunsmithSimulator/Glock17/Audio/586_Glock_17_DryFire-001";
 
     [Header("Weapon Feedback")]
     public float feedbackMessageDuration = 1.4f;
+
+    [Header("Deferred Init")]
+    public bool deferVisualInitialization = true;
 
     private IWeaponInput weaponInput;
     private AudioClip generatedDryFireClip;
@@ -52,14 +58,27 @@ public class GunShooter : MonoBehaviour
     private void Start()
     {
         InitPistolState();
-        InitVisualController();
         InitWeaponInput();
         InitGunAudio();
         InitMuzzleFlash();
+
+        if (!deferVisualInitialization)
+        {
+            InitVisualController();
+        }
+        else
+        {
+            EnsureVisualControllerComponent();
+        }
     }
 
     private void Update()
     {
+        if (GameManager.Instance != null && !GameManager.Instance.CanControlWeapon())
+        {
+            return;
+        }
+
         UpdateAimDot();
         HandleWeaponOperationInput();
 
@@ -110,6 +129,12 @@ public class GunShooter : MonoBehaviour
 
     private void InitVisualController()
     {
+        EnsureVisualControllerComponent();
+        visualController.Initialize();
+    }
+
+    private void EnsureVisualControllerComponent()
+    {
         if (visualController == null)
         {
             visualController = GetComponent<PistolVisualController>();
@@ -121,7 +146,6 @@ public class GunShooter : MonoBehaviour
         }
 
         visualController.pistolState = pistolState;
-        visualController.Initialize();
     }
 
     private void InitGunAudio()
@@ -137,6 +161,12 @@ public class GunShooter : MonoBehaviour
         }
 
         ConfigureAudioSource(gunAudioSource);
+
+        if (useGunAudioResources)
+        {
+            gunShotClip = LoadAudioResource(gunShotClipResourcePath, gunShotClip);
+            dryFireClip = LoadAudioResource(dryFireClipResourcePath, dryFireClip);
+        }
 
         if (gunShotClip != null)
         {
@@ -190,6 +220,11 @@ public class GunShooter : MonoBehaviour
     private void HandleWeaponOperationInput()
     {
         if (pistolState == null || weaponInput == null)
+        {
+            return;
+        }
+
+        if (visualController == null || !visualController.IsInitialized)
         {
             return;
         }
@@ -406,6 +441,7 @@ public class GunShooter : MonoBehaviour
 
         if (result == PistolTriggerResult.DryFire)
         {
+            visualController.NotifyDryFire();
             RegisterDryFire();
         }
         else
@@ -546,10 +582,47 @@ public class GunShooter : MonoBehaviour
 
         if (visualController == null)
         {
-            InitVisualController();
+            EnsureVisualControllerComponent();
         }
 
-        visualController.ResetVisualState();
+        if (visualController != null && visualController.IsInitialized)
+        {
+            visualController.ResetVisualState();
+        }
+    }
+
+    public void LoadWeapon(WeaponDefinition weapon)
+    {
+        if (weapon == null)
+        {
+            return;
+        }
+
+        fireRateRoundsPerMinute = weapon.fireRateRoundsPerMinute;
+
+        gunShotClipResourcePath = weapon.gunShotClipPath;
+        dryFireClipResourcePath = weapon.dryFireClipPath;
+        useGunAudioResources = true;
+        InitGunAudio();
+
+        if (pistolState == null)
+        {
+            InitPistolState();
+        }
+        pistolState.ApplyConfig(weapon.CreatePistolConfig());
+
+        EnsureVisualControllerComponent();
+        visualController.ApplyWeaponDefinition(weapon);
+
+        ResetWeaponState();
+    }
+
+    public void UnloadWeapon()
+    {
+        if (visualController != null && visualController.IsInitialized)
+        {
+            visualController.UnloadVisual();
+        }
     }
 
     private float GetShotCooldown()
@@ -710,6 +783,23 @@ public class GunShooter : MonoBehaviour
         }
 
         return currentBest < 0f ? candidate : Mathf.Min(currentBest, candidate);
+    }
+
+    private static AudioClip LoadAudioResource(string resourcePath, AudioClip fallback)
+    {
+        if (string.IsNullOrEmpty(resourcePath))
+        {
+            return fallback;
+        }
+
+        AudioClip clip = Resources.Load<AudioClip>(resourcePath);
+        if (clip == null)
+        {
+            return fallback;
+        }
+
+        clip.LoadAudioData();
+        return clip;
     }
 
     private static AudioClip CreateDryFireClip()

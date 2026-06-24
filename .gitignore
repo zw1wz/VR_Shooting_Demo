@@ -40,5 +40,11 @@ Desktop.ini
 
 # Local Codely/Codex helper files
 .codely-cli/
+.codely/
 .codelyignore
 .com-unity-codely.json
+screenshots/
+
+# Locally imported third-party/commercial assets
+/Assets/Resources/GunsmithSimulator/
+/Assets/Resources/GunsmithSimulator.meta

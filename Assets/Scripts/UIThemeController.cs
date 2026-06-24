@@ -179,7 +179,10 @@ public class UIThemeController : MonoBehaviour
         }
 
         Button restartButton = FindButton(panel, "RestartButton");
-        StyleButton(restartButton, "重新开始", new Vector2(0f, -365f), new Vector2(280f, 64f));
+        StyleButton(restartButton, "返回菜单", new Vector2(130f, -365f), new Vector2(240f, 56f));
+
+        Button retryButton = FindButton(panel, "RetryButton");
+        StyleButton(retryButton, "重新开始", new Vector2(-130f, -365f), new Vector2(240f, 56f));
     }
 
     private static void StyleHudText(TMP_Text text, int index, Color textColor)

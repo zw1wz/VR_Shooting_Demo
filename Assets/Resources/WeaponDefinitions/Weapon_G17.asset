@@ -1,0 +1,38 @@
+%YAML 1.1
+%TAG !u! tag:yousandi.cn,2023:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: af3aa777dc8d35a4eb0771717e84b278, type: 3}
+  m_Name: Weapon_G17
+  m_EditorClassIdentifier: 
+  weaponId: G17
+  displayName: Glock 17
+  description: "9mm \u534A\u81EA\u52A8\u624B\u67AA\uFF0C17\u53D1\u5F39\u5323"
+  fireMode: 0
+  caliber: 9x19mm
+  magazineCapacity: 17
+  fireRateRoundsPerMinute: 300
+  usesDetachableMagazine: 1
+  locksOpenOnEmpty: 1
+  startWithMagazine: 1
+  startChambered: 1
+  slideStartsLocked: 0
+  autoCycleSlideAfterShot: 1
+  requireTriggerReset: 1
+  gunShotClipPath: GunsmithSimulator/Glock17/Audio/17_Glock_17_Shot_OUT-001
+  dryFireClipPath: GunsmithSimulator/Glock17/Audio/586_Glock_17_DryFire-001
+  slidePulledClipPath: GunsmithSimulator/Glock17/Audio/307_Glock_17_Cock
+  slideReleasedClipPath: GunsmithSimulator/Glock17/Audio/345_Case_Glock_17_Close
+  magazineInsertedClipPath: GunsmithSimulator/Glock17/Audio/58_Glock_17_Mag_In
+  magazineRemovedClipPath: GunsmithSimulator/Glock17/Audio/327_Glock_17_Mag_Out
+  slideLockedClipPath: GunsmithSimulator/Glock17/Audio/697_Glock_17_ShotLast
+  externalModelResourcePath: GunsmithSimulator/Glock17/Imported/Resources/cases/CaseWithGlock17
+  externalModelChildName: Glock17
+  muzzlePointName: MuzzleLocator
